@@ -25,7 +25,8 @@ class App:
             self.master, text="Add from clipboard", command=self.event_clipboard)
 
         self.entry_media_add = ttk.Entry(self.master)
-        self.button_media_add = ttk.Button(self.master, text="Add")
+        
+        self.button_media_add = ttk.Button(self.master, text="Add", command=self.event_add)
 
         self.tree_media = ttkwidgets.CheckboxTreeview(
             self.master, height=self.TREE_MEDIA_HEIGHT_MAX, columns=tuple(self.map_columns.keys()))
@@ -36,32 +37,33 @@ class App:
 
         self.button_clipboard.pack()
         self.entry_media_add.pack()
+        self.entry_media_add.insert(0, "https://www.youtube.com/watch?v=uBV1H_sECbQ")
         self.button_media_add.pack()
         self.tree_media.pack()
 
     def event_clipboard(self):
         urls = pyperclip.paste()
         for url in re.split(r'[\s,]+', urls):
-            media_new = dl.Downloader(url)
-            info = media_new.info()
-            if media_new.type == dl.Type.SINGLE:
-                id = self.tree_media.insert('', 'end', text=info["url"], values=(
-                    info["status"].value, info["title"]))
-                self.map_media[id] = media_new
-                if info["download"]:
-                    self.tree_media.change_state(id, "checked")
-            if media_new.type == dl.Type.PLAYLIST:
-                id = self.tree_media.insert('', 'end', text=info["url"], values=(
-                    info["status"].value, info["title"]))
-                self.map_media[id] = media_new
-                for m in info["media"]:
-                    iid = self.tree_media.insert(id, 'end', text=m["url"], values=(
-                        m["status"].value, m["title"]))
-                    if m["download"]:
-                        self.tree_media.change_state(iid, "checked")
+            self.update_tree(url)
+
+    def event_add(self):
+        urls = self.entry_media_add.get()
+        for url in re.split(r'[\s,]+', urls):
+            self.update_tree(url)
 
     def event_tree_height(self):
         pass
+
+    def update_tree(self, url):
+        media_new = dl.Downloader(url)
+        id = self.tree_media.insert('', 'end', text=media_new.media.url, values=(
+            media_new.media.media.status.value, media_new.media.title))
+        self.map_media[id] = media_new
+        if media_new.type == dl.Type.PLAYLIST:
+            for m in media_new.media_list:
+                self.tree_media.insert(id, 'end', text=m.url, iid=m.idx,
+                    values=(m.status.value, m.title))
+
 
 
 if __name__ == '__main__':
