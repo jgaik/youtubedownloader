@@ -25,11 +25,13 @@ class App:
             self.master, text="Add from clipboard", command=self.event_clipboard)
 
         self.entry_media_add = ttk.Entry(self.master)
-        
-        self.button_media_add = ttk.Button(self.master, text="Add", command=self.event_add)
+
+        self.button_media_add = ttk.Button(
+            self.master, text="Add", command=self.event_add)
 
         self.tree_media = ttkwidgets.CheckboxTreeview(
             self.master, height=self.TREE_MEDIA_HEIGHT_MAX, columns=tuple(self.map_columns.keys()))
+        self.tree_media.bind("<1>", self.event_tree_click)
 
         self.tree_media.heading("#0", text="URL ID")
         for (c_key, c_val) in self.map_columns.items():
@@ -55,14 +57,20 @@ class App:
 
     def update_tree(self, url):
         media_new = dl.Downloader(url)
-        id = self.tree_media.insert('', 'end', text=media_new.media.url, values=(
-            media_new.media.status.value, media_new.media.title))
-        self.map_media[id] = media_new
+        if media_new.type == dl.Type.SINGLE:
+            id = self.tree_media.insert('', 'end', text=media_new.media.url, values=(
+                media_new.media.status.value, media_new.media.title))
+            self.map_media[id] = media_new
         if media_new.type == dl.Type.PLAYLIST:
+            id = self.tree_media.insert('', 'end', text=media_new.media.url, values=(
+                f"Extracted {len(media_new.media_list)} of {media_new.count}", media_new.media.title))
+            self.map_media[id] = media_new
             for m in media_new.media_list:
                 self.tree_media.insert(id, 'end', text=m.url, iid=m.idx,
-                    values=(m.status.value, m.title))
+                                       values=(m.status.value, m.title))
 
+    def event_tree_click(self, event):
+        print(self.tree_media.identify_column(event.x))
 
 
 if __name__ == '__main__':
