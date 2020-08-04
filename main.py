@@ -37,7 +37,6 @@ class App:
 
         self.button_clipboard.pack()
         self.entry_media_add.pack()
-        self.entry_media_add.insert(0, "https://www.youtube.com/watch?v=uBV1H_sECbQ")
         self.button_media_add.pack()
         self.tree_media.pack()
 
@@ -57,7 +56,7 @@ class App:
     def update_tree(self, url):
         media_new = dl.Downloader(url)
         id = self.tree_media.insert('', 'end', text=media_new.media.url, values=(
-            media_new.media.media.status.value, media_new.media.title))
+            media_new.media.status.value, media_new.media.title))
         self.map_media[id] = media_new
         if media_new.type == dl.Type.PLAYLIST:
             for m in media_new.media_list:
