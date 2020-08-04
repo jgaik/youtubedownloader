@@ -15,6 +15,15 @@ class Status(enum.Enum):
     DONE = "Done"
 
 
+class Media:
+
+    def __init__(self, url='', title='', status=Status.OK, idx=0):
+      self.url = url
+      self.title = title
+      self.status = status
+      self.idx = idx
+
+
 class Downloader:
 
     def __init__(self, url):
@@ -24,47 +33,32 @@ class Downloader:
         }
         with yt.YoutubeDL(opts) as ytd:
             data_all = ytd.extract_info(url, download=False)
-        self.data = {
-            "url": data_all["id"],
-            "title": data_all["title"],
-        }
+
+        self.media = Media(url=data_all["id"],
+                           title=data_all["title"])
         if data_all is None:
-            self.data["status"] = Status.ERROR_URL
+            self.media.status = Status.ERROR_URL
             self.type = Type.SINGLE
-            self.data["download"] = False
         else:
             if "entries" in data_all:
                 medialist = data_all["entries"]
-                if len(medialist) == 0:
+                self.count = 0
+                self.type = Type.PLAYLIST
+                self.media_list = []
+                self.media.status = Status.OK
+                for media in medialist:
+                    if not media is None:
+                        self.media_list.append(
+                            Media(url=media["id"],
+                                    title=media["title"],
+                                    idx=self.count))
+                    self.count += 1
+                if not self.media_list:
                     self.type = Type.SINGLE
-                    self.data["status"] = Status.ERROR_URL
-                    self.data["download"] = False
-                else:
-                    self.data["count"] = 0
-                    self.type = Type.PLAYLIST
-                    self.data["media"] = []
-                    self.data["status"] = Status.OK
-                    for media in medialist:
-                        if media is None:
-                            self.data["media"].append({
-                                "url": "-",
-                                "status": Status.ERROR_URL,
-                                "title": "-",
-                                "download": False
-                            })
-                            self.data["status"] = Status.ERROR_URL
-                        else:
-                            self.data["media"].append({
-                                "url": media["id"],
-                                "status": Status.OK,
-                                "title": media["title"],
-                                "download": True
-                            })
-                        self.data["count"] += 1
+                    self.media.status = Status.ERROR_URL
             else:
                 self.type = Type.SINGLE
-                self.data["status"] = Status.OK
-                self.data["download"] = True
+                self.media.status = Status.OK
 
     def info(self):
         return self.data
