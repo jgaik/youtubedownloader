@@ -34,12 +34,13 @@ class Downloader:
         with yt.YoutubeDL(opts) as ytd:
             data_all = ytd.extract_info(url, download=False)
 
-        self.media = Media(url=data_all["id"],
-                           title=data_all["title"])
+        
         if data_all is None:
-            self.media.status = Status.ERROR_URL
+            self.media = Media(url = url, status = Status.ERROR_URL)
             self.type = Type.SINGLE
         else:
+            self.media = Media(url=data_all["id"],
+                               title=data_all["title"])
             if "entries" in data_all:
                 medialist = data_all["entries"]
                 self.count = 0
@@ -59,9 +60,6 @@ class Downloader:
             else:
                 self.type = Type.SINGLE
                 self.media.status = Status.OK
-
-    def info(self):
-        return self.data
 
     def start(self):
         pass
