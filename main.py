@@ -6,7 +6,9 @@ import ttkwidgets
 #import pyperclip
 import downloader as dl
 import re
-from concurrent.futures import ThreadPoolExecutor
+import threading as th
+import concurrent.futures as concurr
+import queue as q
 import os
 
 class App:
@@ -38,16 +40,15 @@ class App:
 
     def __init__(self, master):
         self.master = master
+        self._flag_update = False
+        self._queue_media = q.Queue()
 
         self.map_media = {}
 
         self.button_clipboard = ttk.Button(
-            self.master, text="Add from clipboard", command=self.event_clipboard)
-
-        self.entry_media_add = ttk.Entry(self.master)
-
-        self.button_media_add = ttk.Button(
-            self.master, text="Add", command=self.event_add)
+            self.master, text="Add from clipboard", command=th.Thread(target=self.event_clipboard).start)
+        
+        self.progress_info = ttk.Progressbasr(self.master)
 
         self.var_check_audio = tk.StringVar()
         self.var_check_audio.set(self.Format.VIDEO)
@@ -80,8 +81,6 @@ class App:
         self.tree_media.column(self.Column.FORMAT, anchor="center")
 
         self.button_clipboard.pack()
-        self.entry_media_add.pack()
-        self.button_media_add.pack()
         self.check_audio.pack()
         self.tree_media.pack()
         label_dir_default.pack()
@@ -90,65 +89,61 @@ class App:
         self.button_dir_default.pack()
 
     def event_clipboard(self):
+        self._flag_update = True
+        th.Thread(target=self.update_tree).start()
         #urls = pyperclip.paste()
         urls = 'https://www.youtube.com/watch?v=hS5CfP8n_js, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/watch?v=xxSTOGFoDeg&list=PLrryvZ-gdCErP01mLIHNidblxMovnockz, https://www.youtube.com/watch?v=Owx3gcvark8'
-        with ThreadPoolExecutor() as executor:
-            result = executor.map(self.get_media_info,  re.split(r'[\s,]+', urls))
-        for r in result:
-            self.update_tree(r)
-
-    def event_add(self):
-        urls = self.entry_media_add.get()
-        urls = 'https://www.youtube.com/watch?v=hS5CfP8n_js, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/watch?v=xxSTOGFoDeg&list=PLrryvZ-gdCErP01mLIHNidblxMovnockz, https://www.youtube.com/watch?v=Owx3gcvark8'
-        with ThreadPoolExecutor() as executor:
-            result = executor.map(self.get_media_info,  re.split(r'[\s,]+', urls))
-        for r in result:
-            self.update_tree(r)
+        with concurr.ThreadPoolExecutor() as executor:
+            executor.map(self.get_media_info, re.split(r'[\s,]+', urls))
+        self._flag_update = False
 
     def get_media_info(self, url):
-        return dl.Downloader(url)
+        self._queue_media.put(dl.Downloader(url))
 
-    def update_tree(self, media_new):
+    def update_tree(self):
         def statuscheck(media):
             if media.status == dl.Status.OK:
                 return 'checked'
             else:
                 return 'unchecked'
 
-        dest = ""
-        if media_new.type == dl.Type.SINGLE:
-            if media_new.media.status == dl.Status.OK:
-                dest = os.sep.join(["~", media_new.media.title]) 
-            id = self.tree_media.insert('', 'end', text=media_new.media.url, 
-                                        values=(
-                                                media_new.media.status.value, 
-                                                media_new.media.title, 
+        while self._flag_update:
+            media_new = self._queue_media.get()
+        
+            dest = ""
+            if media_new.type == dl.Type.SINGLE:
+                if media_new.media.status == dl.Status.OK:
+                    dest = os.sep.join(["~", media_new.media.title]) 
+                id = self.tree_media.insert('', 'end', text=media_new.media.url, 
+                                            values=(
+                                                    media_new.media.status.value, 
+                                                    media_new.media.title, 
+                                                    self.var_check_audio.get(),
+                                                    dest),
+                                            tags=statuscheck(media_new.media))
+            if media_new.type == dl.Type.PLAYLIST:
+                if self.var_check_subdir.get():
+                    dest = os.sep.join(["~", media_new.media.title])
+                else:
+                    dest = "~" + os.sep
+                id = self.tree_media.insert('', 'end', text=media_new.media.url, 
+                                            values=(
+                                                f"Extracted {len(media_new.media_list)} of {media_new.count}",
+                                                media_new.media.title,
                                                 self.var_check_audio.get(),
                                                 dest),
-                                        tags=statuscheck(media_new.media))
-        if media_new.type == dl.Type.PLAYLIST:
-            if self.var_check_subdir.get():
-                dest = os.sep.join(["~", media_new.media.title])
-            else:
-                dest = "~" + os.sep
-            id = self.tree_media.insert('', 'end', text=media_new.media.url, 
-                                        values=(
-                                            f"Extracted {len(media_new.media_list)} of {media_new.count}",
-                                            media_new.media.title,
-                                            self.var_check_audio.get(),
-                                            dest),
-                                        tags='checked')
-            for m in media_new.media_list:
-                d = os.sep.join([dest, m.title])
-                self.tree_media.insert(id, 'end', text=m.url, 
-                                        iid="_".join([id,str(m.idx)]),
-                                        values=(
-                                            m.status.value, 
-                                            m.title, 
-                                            self.var_check_audio.get(),
-                                            d), 
-                                        tags=statuscheck(m))
-        self.map_media[id] = media_new
+                                            tags='checked')
+                for m in media_new.media_list:
+                    d = os.sep.join([dest, m.title])
+                    self.tree_media.insert(id, 'end', text=m.url, 
+                                            iid="_".join([id,str(m.idx)]),
+                                            values=(
+                                                m.status.value, 
+                                                m.title, 
+                                                self.var_check_audio.get(),
+                                                d), 
+                                            tags=statuscheck(m))
+            self.map_media[id] = media_new
 
     def event_tree_click(self, event):
         x, y, widget = event.x, event.y, event.widget
