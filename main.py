@@ -72,8 +72,10 @@ class App:
         label_dir_default = ttk.Label(self.frame_dir, text="Default directory")
         self.entry_dir_default = ttk.Entry(
             self.frame_dir, textvariable=self.var_dir_default, state=tk.DISABLED, width=len(
-                self.var_dir_default.get()))
+                self.var_dir_default.get())+5)
         self.entry_dir_default.bind("<Double-1>", self.event_dir_default)
+        self.entry_dir_default.bind("<Button-4>", self.event_dir_scroll_up)
+        self.entry_dir_default.bind("<Button-5>", self.event_dir_scroll_down)
 
         self.var_check_subdir = tk.BooleanVar()
         self.var_check_subdir.set(True)
@@ -81,7 +83,7 @@ class App:
                                             onvalue=True, offvalue=False, variable=self.var_check_subdir)
 
         self.button_dir_default = ttk.Button(
-            self.frame_dir, text="Change default", command=self.event_dir_default)
+            self.frame_dir, text="...", width=2, command=self.event_dir_default)
 
         self.tree_media = ttkwidgets.CheckboxTreeview(
             self.frame_tree, columns=self.Column.to_columns(), selectmode='none')
@@ -94,11 +96,11 @@ class App:
         self.tree_media.heading(self.Column.FORMAT, text="Format")
         self.tree_media.heading(self.Column.DESTINATION, text="Destination")
 
-        self.tree_media.column(self.Column.URL, minwidth=65, stretch=True)
+        self.tree_media.column(self.Column.URL, minwidth=65, width=100, stretch=True)
         self.tree_media.column(self.Column.STATUS, minwidth=120, width=150, stretch=True)
         self.tree_media.column(self.Column.TITLE, width=300, minwidth=100, stretch=True)
         self.tree_media.column(self.Column.FORMAT, anchor="center", minwidth=100, width=120, stretch=True)
-        self.tree_media.column(self.Column.DESTINATION, minwidth=80, stretch=True)
+        self.tree_media.column(self.Column.DESTINATION, minwidth=100, stretch=True)
 
         self.progress_info = ttk.Progressbar(self.frame_tree)
 
@@ -107,8 +109,8 @@ class App:
         self.master.grid_columnconfigure(0, weight=1)
         self.master.grid_rowconfigure(1, weight=1)
 
-        self.frame_add.grid(row=0, column=0, sticky="we", padx=5, pady=5)
-        self.frame_tree.grid(row=1, column=0, sticky="nswe")
+        self.frame_add.grid(row=0, column=0, sticky="we", padx=15, pady=10)
+        self.frame_tree.grid(row=1, column=0, sticky="nswe", padx=15, pady=5)
         self.frame_dir.grid(row=0, column=1, rowspan=2, sticky="ns", padx=10)
 
         #frame add and download
@@ -129,10 +131,12 @@ class App:
         self.frame_dir.grid_rowconfigure(0, weight=1)
         self.frame_dir.grid_rowconfigure(3, weight=4)
 
-        label_dir_default.grid(row=0, column=0, sticky='s')
-        self.entry_dir_default.grid(row=1, column=0, sticky='ns')
-        self.check_subdir.grid(row=2, column=0, sticky='ns')
-        self.button_dir_default.grid(row=3, column=0, sticky='n')
+        label_dir_default.grid(row=0, column=0, columnspan=2, sticky='sw')
+        self.entry_dir_default.grid(row=1, column=0, sticky='nswe')
+        self.check_subdir.grid(row=2, column=0, sticky='nw')
+        self.button_dir_default.grid(row=1, column=1, columnspan=2, sticky='w')
+
+        self.master.update()
 
     def progress_start(self, max, text):
         self.progress_info['maximum'] = max
@@ -194,7 +198,7 @@ class App:
                 if self.var_check_subdir.get():
                     dest = os.sep.join(["~", media_new.media.title])
                 else:
-                    dest = "~"
+                    dest = ""
                 id = self.tree_media.insert('', 'end', text=media_new.media.url,
                                             values=(
                                                 f"Extracted {len(media_new.media_list)} of {media_new.count}",
@@ -203,7 +207,10 @@ class App:
                                                 dest),
                                             tags='checked')
                 for m in media_new.media_list:
-                    d = os.sep.join([dest, m.title])
+                    if self.var_check_subdir.get():
+                        d = os.sep.join([dest, m.title])
+                    else:
+                        d = os.sep.join(["~", m.title])
                     self.tree_media.insert(id, 'end', text=m.url,
                                            iid="_".join([id, str(m.idx)]),
                                            values=(
@@ -350,6 +357,11 @@ class App:
         if dir:
             self.var_dir_default.set(dir)
 
+    def event_dir_scroll_up(self, event):
+        self.entry_dir_default.xview_scroll(-1, tk.UNITS)
+
+    def event_dir_scroll_down(self, event):
+        self.entry_dir_default.xview_scroll(1, tk.UNITS)
 
 if __name__ == '__main__':
     root = tk.Tk()
