@@ -13,8 +13,6 @@ import os
 
 
 class App:
-    TREE_MEDIA_HEIGHT_MIN = 1
-    TREE_MEDIA_HEIGHT_MAX = 10
 
     class Format:
         AUDIO = "audio"
@@ -86,7 +84,7 @@ class App:
             self.frame_dir, text="Change default", command=self.event_dir_default)
 
         self.tree_media = ttkwidgets.CheckboxTreeview(
-            self.frame_tree, height=self.TREE_MEDIA_HEIGHT_MAX, columns=self.Column.to_columns())
+            self.frame_tree, columns=self.Column.to_columns(), selectmode='none')
         self.tree_media.bind("<Button-1>", self.event_tree_click)
         self.tree_media.bind("<Double-1>", self.event_tree_doubleclick)
 
@@ -96,29 +94,45 @@ class App:
         self.tree_media.heading(self.Column.FORMAT, text="Format")
         self.tree_media.heading(self.Column.DESTINATION, text="Destination")
 
-        self.tree_media.column(self.Column.STATUS, width=150)
-        self.tree_media.column(self.Column.FORMAT, anchor="center", width=100)
-        self.tree_media.column(self.Column.TITLE, width=350)
+        self.tree_media.column(self.Column.URL, minwidth=65, stretch=True)
+        self.tree_media.column(self.Column.STATUS, minwidth=120, width=150, stretch=True)
+        self.tree_media.column(self.Column.TITLE, width=300, minwidth=100, stretch=True)
+        self.tree_media.column(self.Column.FORMAT, anchor="center", minwidth=100, width=120, stretch=True)
+        self.tree_media.column(self.Column.DESTINATION, minwidth=80, stretch=True)
 
-        l = sum([self.tree_media.column(c, option='width')
-                 for c in self.Column.to_columns(True)])
-        self.progress_info = ttk.Progressbar(self.master, length=l)
+        self.progress_info = ttk.Progressbar(self.frame_tree)
 
-        self.frame_add.grid(row=0, column=0)
-        self.frame_tree.grid(row=1, column=0)
-        self.frame_dir.grid(row=0, column=1, rowspan=2)
+        #layout settings
+        #mainframe
+        self.master.grid_columnconfigure(0, weight=1)
+        self.master.grid_rowconfigure(1, weight=1)
 
-        self.button_clipboard.grid(row=0, column=0)
-        self.check_audio.grid(row=0, column=1)
-        self.button_download.grid(row=0, column=2)
+        self.frame_add.grid(row=0, column=0, sticky="we", padx=5, pady=5)
+        self.frame_tree.grid(row=1, column=0, sticky="nswe")
+        self.frame_dir.grid(row=0, column=1, rowspan=2, sticky="ns", padx=10)
 
-        self.tree_media.grid()
+        #frame add and download
+        self.frame_add.grid_columnconfigure(2, weight=1)
 
-        label_dir_default.grid(row=0, column=0)
-        self.entry_dir_default.grid(row=1, column=0)
-        self.check_subdir.grid(row=2, column=0)
-        self.button_dir_default.grid(row=3, column=0)
-        self.progress_info.grid(row=2, column=0)
+        self.button_clipboard.grid(row=0, column=0, sticky="w")
+        self.check_audio.grid(row=0, column=1, sticky="w")
+        self.button_download.grid(row=0, column=2, sticky="e")
+
+        #frame tree and progress
+        self.frame_tree.grid_columnconfigure(0, weight=1)
+        self.frame_tree.grid_rowconfigure(0, weight=1)
+
+        self.tree_media.grid(sticky="nswe")
+        self.progress_info.grid(row=1, column=0, sticky="we")
+
+        #frame directory
+        self.frame_dir.grid_rowconfigure(0, weight=1)
+        self.frame_dir.grid_rowconfigure(3, weight=4)
+
+        label_dir_default.grid(row=0, column=0, sticky='s')
+        self.entry_dir_default.grid(row=1, column=0, sticky='ns')
+        self.check_subdir.grid(row=2, column=0, sticky='ns')
+        self.button_dir_default.grid(row=3, column=0, sticky='n')
 
     def progress_start(self, max, text):
         self.progress_info['maximum'] = max
@@ -145,7 +159,7 @@ class App:
         self._flag_update = True
         th.Thread(target=self.update_tree).start()
         # urls = pyperclip.paste()
-        urls = 'https://www.youtube.com/watch?v=hS5CfP8n_js, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
+        urls = 'https://www.youtube.com/watch?v=hS5Cfn_js, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
         urls = re.split(r'[\s,]+', urls)
         self.progress_start(len(urls), 'Retrieving info..')
         with concurr.ThreadPoolExecutor() as executor:
@@ -206,7 +220,7 @@ class App:
         x, y, widget = event.x, event.y, event.widget
         elem = widget.identify("element", x, y)
         item = self.tree_media.identify_row(y)
-        if not item is None:
+        if item != "":
             val = self.tree_media.set(item, self.Column.FORMAT)
             parent = self.tree_media.parent(item)
             if not parent:
@@ -214,7 +228,7 @@ class App:
         else:
             return
         if "image" in elem:
-            if not dl.Status.ERROR_URL.value in val:
+            if not self.tree_media.set(item, self.Column.STATUS) == dl.Status.ERROR_URL.value:
                 if self.tree_media.tag_has("unchecked", item) or self.tree_media.tag_has("tristate", item):
                     self.tree_media._check_ancestor(item)
                     self.tree_media._check_descendant(item)
@@ -266,7 +280,7 @@ class App:
     def event_tree_doubleclick(self, event):
         x, y = event.x, event.y
         item = self.tree_media.identify_row(y)
-        if not item is None:
+        if item != "":
             parent = self.tree_media.parent(item)
             if not parent:
                 children = self.tree_media.get_children(item)
@@ -330,7 +344,7 @@ class App:
                 self.tree_media.set(
                     subchild, self.Column.FORMAT, self.var_check_audio.get())
 
-    def event_dir_default(self, event):
+    def event_dir_default(self, event=None):
         dir = fdiag.askdirectory(
             initialdir=self.var_dir_default.get(), mustexist=True)
         if dir:
