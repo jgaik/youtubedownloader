@@ -47,9 +47,10 @@ class App:
 
         self.map_media = {}
 
-        self.frame_add = ttk.Frame(self.master)
-        self.frame_dir = ttk.Frame(self.master)
-        self.frame_tree = ttk.Frame(self.master)
+        self.frame_view = ttk.Frame(self.master)
+        self.frame_control = ttk.Frame(self.master)
+        self.frame_add = ttk.Frame(self.frame_control)
+        self.frame_dir = ttk.Frame(self.frame_control)
 
         self.style_progress = ttk.Style(self.master)
         self.style_progress.layout('Horizontal.TProgressbar',
@@ -58,35 +59,42 @@ class App:
                                        'sticky': 'nswe'}),
                                        ('Horizontal.Profressbar.label', {'sticky': ''})])
 
+        #widgets
+        #frame_setup
+        #frame_add - adding urls
         self.button_clipboard = ttk.Button(
             self.frame_add, text="Add from clipboard", command=self.event_clipboard)
-        self.button_download = ttk.Button(
-            self.frame_add, text="Download selected", command=self.event_download)
         self.var_check_audio = tk.StringVar()
         self.var_check_audio.set(self.Format.VIDEO)
         self.check_audio = ttk.Checkbutton(self.frame_add, text="Audio only (mp3)",
                                            onvalue=self.Format.AUDIO, offvalue=self.Format.VIDEO, variable=self.var_check_audio, command=self.event_check_audio)
 
+        #frame_dir - default directory
+        label_dir_default = ttk.Label(self.frame_dir, text="Default directory:")
         self.var_dir_default = tk.StringVar()
         self.var_dir_default.set(os.path.expanduser("~"))
-        label_dir_default = ttk.Label(self.frame_dir, text="Default directory")
         self.entry_dir_default = ttk.Entry(
             self.frame_dir, textvariable=self.var_dir_default, state=tk.DISABLED, width=len(
                 self.var_dir_default.get())+5)
         self.entry_dir_default.bind("<Double-1>", self.event_dir_default)
         self.entry_dir_default.bind("<Button-4>", self.event_dir_scroll_up)
         self.entry_dir_default.bind("<Button-5>", self.event_dir_scroll_down)
+        
+        self.button_dir_default = ttk.Button(
+            self.frame_dir, text="...", width=2, command=self.event_dir_default)
 
         self.var_check_subdir = tk.BooleanVar()
         self.var_check_subdir.set(True)
         self.check_subdir = ttk.Checkbutton(self.frame_dir, text="Playlists in subfolders",
                                             onvalue=True, offvalue=False, variable=self.var_check_subdir)
 
-        self.button_dir_default = ttk.Button(
-            self.frame_dir, text="...", width=2, command=self.event_dir_default)
-
+        #no subframe
+        self.button_download = ttk.Button(
+            self.frame_add, text="Download selected", command=self.event_download)
+        
+        #frame_view
         self.tree_media = ttkwidgets.CheckboxTreeview(
-            self.frame_tree, columns=self.Column.to_columns(), selectmode='none')
+            self.frame_view, columns=self.Column.to_columns(), selectmode='none')
         self.tree_media.bind("<Button-1>", self.event_tree_click)
         self.tree_media.bind("<Double-1>", self.event_tree_doubleclick)
 
@@ -102,41 +110,43 @@ class App:
         self.tree_media.column(self.Column.FORMAT, anchor="center", minwidth=100, width=120, stretch=True)
         self.tree_media.column(self.Column.DESTINATION, minwidth=100, stretch=True)
 
-        self.progress_info = ttk.Progressbar(self.frame_tree)
+        self.progress_info = ttk.Progressbar(self.frame_view)
 
         #layout settings
         #mainframe
         self.master.grid_columnconfigure(0, weight=1)
-        self.master.grid_rowconfigure(1, weight=1)
+        self.master.grid_rowconfigure(0, weight=1)
 
-        self.frame_add.grid(row=0, column=0, sticky="we", padx=15, pady=10)
-        self.frame_tree.grid(row=1, column=0, sticky="nswe", padx=15, pady=5)
-        self.frame_dir.grid(row=0, column=1, rowspan=2, sticky="ns", padx=10)
+        self.frame_view.grid(row=0, column=0, sticky="nswe", padx=15, pady=5)
+        self.frame_control.grid(row=0, column=1, sticky="nswe", padx=5, pady=10)
 
-        #frame add and download
-        self.frame_add.grid_columnconfigure(2, weight=1)
+        #frame_view
+        self.frame_view.grid_columnconfigure(0, weight=1)
+        self.frame_view.grid_rowconfigure(0, weight=1)
 
-        self.button_clipboard.grid(row=0, column=0, sticky="w")
-        self.check_audio.grid(row=0, column=1, sticky="w")
-        self.button_download.grid(row=0, column=2, sticky="e")
+        self.tree_media.grid(sticky="nswe", pady=5)
+        self.progress_info.grid(row=1, column=0, sticky="we", pady=7)
 
-        #frame tree and progress
-        self.frame_tree.grid_columnconfigure(0, weight=1)
-        self.frame_tree.grid_rowconfigure(0, weight=1)
+        #frame_control
+        self.frame_control.grid_rowconfigure(1, weight=1)
+        self.frame_control.grid_rowconfigure(2, weight=3)
 
-        self.tree_media.grid(sticky="nswe")
-        self.progress_info.grid(row=1, column=0, sticky="we")
+        self.frame_dir.grid(row=0, column=0, sticky="nwe", padx=5, pady=10)
+        self.frame_add.grid(row=1, column=0, sticky="we", padx=5, pady=10)
+        self.button_download.grid(row=2, column=0, sticky="wse")
 
-        #frame directory
-        self.frame_dir.grid_rowconfigure(0, weight=1)
-        self.frame_dir.grid_rowconfigure(3, weight=4)
+        #frame_dir
+        label_dir_default.grid(row=0, column=0, columnspan=2, sticky='sw',pady=5)
+        self.entry_dir_default.grid(row=1, column=0, sticky='nswe', ipady=2)
+        self.button_dir_default.grid(row=1, column=1, sticky='w', padx=5)
+        self.check_subdir.grid(row=2, column=0, sticky='nw', pady=5)        
 
-        label_dir_default.grid(row=0, column=0, columnspan=2, sticky='sw')
-        self.entry_dir_default.grid(row=1, column=0, sticky='nswe')
-        self.check_subdir.grid(row=2, column=0, sticky='nw')
-        self.button_dir_default.grid(row=1, column=1, columnspan=2, sticky='w')
+        #frame_add
+        self.button_clipboard.grid(row=0, column=0, sticky="nwe")
+        self.check_audio.grid(row=1, column=0, sticky="nw", pady=5)
 
-        self.master.update()
+        #self.master.update()
+       # self.master.geometry(f"{self.master.winfo_screenwidth()}x{self.master.winfo_height()}+0+0")
 
     def progress_start(self, max, text):
         self.progress_info['maximum'] = max
