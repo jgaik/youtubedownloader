@@ -10,6 +10,7 @@ import threading as th
 import concurrent.futures as concurr
 import queue as q
 import os
+from collections.abc import MutableSequence
 
 
 class App:
@@ -41,8 +42,8 @@ class App:
 
     def __init__(self, master):
         self.master = master
-        self._flag_update = False
         self._queue_media = q.Queue()
+        self._flag_update = False
         self._flag_download = False
 
         self.map_media = {}
@@ -150,6 +151,9 @@ class App:
         self.button_clipboard.grid(row=0, column=0, sticky="nwe")
         self.check_audio.grid(row=1, column=0, sticky="nw", pady=5)
 
+
+        #window
+        self.master.title("YouTube downloader")
         self.master.update()
         w_max = self.master.winfo_screenwidth()
         w_opt = self.master.winfo_width()
@@ -180,59 +184,96 @@ class App:
 
     def event_clipboard(self):
         if not self._flag_update and not self._flag_download:
-            thread = th.Thread(target=self.thread_clipboard)
-            thread.start()
+            #urls = pyperclip.paste()
+            urls = 'https://youtu.be/JKHTdzAvI, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
+            urls = re.split(r'[\s,]+', urls)
+            self.update_tree_media(urls)
 
     def event_download(self):
         pass
 
-    def thread_clipboard(self):
+    def update_tree_media(self, urls):
+        th.Thread(target=self.thread_url_parser, args=(urls,)).start()
+
+    def thread_url_parser(self, url_data):
         self._flag_update = True
-        th.Thread(target=self.update_tree).start()
-        # urls = pyperclip.paste()
-        urls = 'https://www.youtube.com/watch?v=hS5Cfn_js, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
-        urls = re.split(r'[\s,]+', urls)
-        self.progress_start(len(urls), 'Retrieving info..')
         with concurr.ThreadPoolExecutor() as executor:
-            executor.map(self.get_media_info, urls)
+            if isinstance(url_data, MutableSequence):
+                th.Thread(target=self.thread_update_tree).start()
+                self.progress_start(len(url_data), 'Retrieving info..')
+                executor.map(self.queue_media_info, url_data)
+            else:
+                th.Thread(target=self.thread_update_tree, args=(self.tree_media.focus(),)).start()
+                self.progress_start(1, 'Retrieving info..')
+                executor.submit(self.queue_media_info, url_data)
         self._flag_update = False
 
-    def get_media_info(self, url):
+    def queue_media_info(self, url):
         self._queue_media.put(dl.Downloader(url))
 
-    def update_tree(self):
+    def thread_update_tree(self, id_change=None):
         def statuscheck(media):
             if media.status == dl.Status.OK:
                 return 'checked'
             else:
                 return 'unchecked'
 
-        while self._flag_update or not self._queue_media.empty():
+        while self._flag_update:
             media_new = self._queue_media.get()
 
             dest = ""
+            format = self.var_check_audio.get()
             if media_new.type == dl.Type.SINGLE:
                 if media_new.media.status == dl.Status.OK:
                     dest = os.sep.join(["~", media_new.media.title])
-                id = self.tree_media.insert('', 'end', text=media_new.media.url,
-                                            values=(
-                                                media_new.media.status.value,
-                                                media_new.media.title,
-                                                self.var_check_audio.get(),
-                                                dest),
-                                            tags=statuscheck(media_new.media))
+                else:
+                    format = ""
+                if id_change:
+                    id = id_change
+                    data = {
+                        'text': media_new.media.url,
+                        'values':(
+                            media_new.media.status.value,
+                            media_new.media.title,
+                            format,
+                            dest),
+                        'tags': statuscheck(media_new.media)
+                    }
+                    self.tree_media.item(id, **data)
+                else:
+                    id = self.tree_media.insert('', 'end', text=media_new.media.url,
+                                                values=(
+                                                    media_new.media.status.value,
+                                                    media_new.media.title,
+                                                    format,
+                                                    dest),
+                                                tags=statuscheck(media_new.media))
             if media_new.type == dl.Type.PLAYLIST:
                 if self.var_check_subdir.get():
                     dest = os.sep.join(["~", media_new.media.title])
                 else:
                     dest = ""
-                id = self.tree_media.insert('', 'end', text=media_new.media.url,
-                                            values=(
-                                                f"Extracted {len(media_new.media_list)} of {media_new.count}",
-                                                media_new.media.title,
-                                                self.var_check_audio.get(),
-                                                dest),
-                                            tags='checked')
+
+                if id_change:
+                    id = id_change
+                    data = {
+                        'text': media_new.media.url,
+                        'values':(
+                            f"Extracted {len(media_new.media_list)} of {media_new.count}",
+                            media_new.media.title,
+                            format,
+                            dest),
+                        'tags': statuscheck(media_new.media)
+                    }
+                    self.tree_media.item(id, **data)
+                else:
+                    id = self.tree_media.insert('', 'end', text=media_new.media.url,
+                                                values=(
+                                                    f"Extracted {len(media_new.media_list)} of {media_new.count}",
+                                                    media_new.media.title,
+                                                    format,
+                                                    dest),
+                                                tags='checked')
                 for m in media_new.media_list:
                     if self.var_check_subdir.get():
                         d = os.sep.join([dest, m.title])
@@ -365,6 +406,12 @@ class App:
                         for child in children:
                             self.tree_media.set(child, self.Column.DESTINATION,
                                                 self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
+
+        if self.tree_media.identify_column(x) == self.Column.URL and self.tree_media.set(item, self.Column.STATUS) == dl.Status.ERROR_URL.value:
+            url_new = sdiag.askstring('Edit URL', 'Enter new URL', initialvalue=
+                self.tree_media.item(item, option='text'))
+            if url_new:
+                self.update_tree_media(url_new)
 
         if not self.tree_media.identify_column(x) == self.Column.STATUS:
             self.tree_media.item(
