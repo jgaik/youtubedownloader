@@ -13,6 +13,62 @@ import os
 from collections.abc import MutableSequence
 
 
+class AskString(sdiag.Dialog):
+
+    def __init__(self, title, prompt, initialvalue, parent=None):
+        if not parent:
+            parent = tk._default_root
+        self.prompt = prompt
+        self.initialvalue = initialvalue
+        sdiag.Dialog.__init__(self, parent, title)
+
+    def body(self, master):
+
+        label_prompt = ttk.Label(master, text=self.prompt, justify=tk.LEFT)
+        label_prompt.grid(row=0, padx=5, sticky='w')
+
+        self.entry = ttk.Entry(master, name='entry',
+                               width=len(self.initialvalue))
+        self.entry.grid(row=1, padx=5, sticky='we')
+
+        self.entry.insert(0, self.initialvalue)
+        self.entry.select_range(0, tk.END)
+
+        self.update()
+        self.geometry("+0+0")
+        self.resizable(False, False)
+        return self.entry
+
+    def buttonbox(self):
+
+        box = ttk.Frame(self)
+
+        w = ttk.Button(box, text="OK", width=10,
+                       command=self.ok, default=tk.ACTIVE)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+        w = ttk.Button(box, text="Cancel", width=10, command=self.cancel)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+        box.pack()
+
+    def validate(self):
+        self.result = self.entry.get()
+        return 1
+
+    def destroy(self):
+        self.entry = None
+        sdiag.Dialog.destroy(self)
+
+
+def askstring(title, prompt, initialvalue, x, y, **kw):
+    d = AskString(title=title, prompt=prompt,
+                  initialvalue=initialvalue, **kw)
+    return d.result
+
+
 class App:
 
     class Format:
@@ -92,7 +148,9 @@ class App:
 
         # no subframe
         self.button_download = ttk.Button(
-            self.frame_add, text="Download selected", command=self.event_download)
+            self.frame_control, text="Download selected", command=self.event_download)
+        self.button_clear = ttk.Button(
+            self.frame_control, text="Clear", width=5, command=self.event_clear)
 
         # frame_view
         self.tree_media = ttkwidgets.CheckboxTreeview(
@@ -136,9 +194,12 @@ class App:
         self.progress_info.grid(row=1, column=0, sticky="we", pady=7)
 
         # frame_control
-        self.frame_dir.grid(row=0, column=0, sticky="n", padx=5, pady=10)
-        self.frame_add.grid(row=1, column=0, sticky="w", padx=5, pady=10)
+        self.frame_dir.grid(row=0, column=0, columnspan=2,
+                            sticky="n", padx=5, pady=10)
+        self.frame_add.grid(row=1, column=0, columnspan=2,
+                            sticky="w", padx=5, pady=10)
         self.button_download.grid(row=2, column=0, sticky="ws", pady=15)
+        self.button_clear.grid(row=2, column=1, sticky='w', padx=5)
 
         # frame_dir
         label_dir_default.grid(
@@ -149,10 +210,9 @@ class App:
 
         # frame_add
         self.button_clipboard.grid(row=0, column=0, sticky="nwe")
-        self.check_audio.grid(row=1, column=0, sticky="nw", pady=5)
+        self.check_audio.grid(row=1, column=0, sticky="nwe", pady=5)
 
-
-        #window
+        # window
         self.master.title("YouTube downloader")
         self.master.update()
         w_max = self.master.winfo_screenwidth()
@@ -192,6 +252,10 @@ class App:
     def event_download(self):
         pass
 
+    def event_clear(self):
+        self.tree_media.delete(*self.tree_media.get_children())
+        self.map_media = {}
+
     def update_tree_media(self, urls):
         th.Thread(target=self.thread_url_parser, args=(urls,)).start()
 
@@ -203,7 +267,8 @@ class App:
                 self.progress_start(len(url_data), 'Retrieving info..')
                 executor.map(self.queue_media_info, url_data)
             else:
-                th.Thread(target=self.thread_update_tree, args=(self.tree_media.focus(),)).start()
+                th.Thread(target=self.thread_update_tree,
+                          args=(self.tree_media.focus(),)).start()
                 self.progress_start(1, 'Retrieving info..')
                 executor.submit(self.queue_media_info, url_data)
         self._flag_update = False
@@ -232,7 +297,7 @@ class App:
                     id = id_change
                     data = {
                         'text': media_new.media.url,
-                        'values':(
+                        'values': (
                             media_new.media.status.value,
                             media_new.media.title,
                             format,
@@ -258,7 +323,7 @@ class App:
                     id = id_change
                     data = {
                         'text': media_new.media.url,
-                        'values':(
+                        'values': (
                             f"Extracted {len(media_new.media_list)} of {media_new.count}",
                             media_new.media.title,
                             format,
@@ -357,6 +422,8 @@ class App:
         item = self.tree_media.identify_row(y)
         if item != "":
             parent = self.tree_media.parent(item)
+            status_ok = not self.tree_media.set(
+                item, self.Column.STATUS) == dl.Status.ERROR_URL.value
             if not parent:
                 children = self.tree_media.get_children(item)
         else:
@@ -393,10 +460,10 @@ class App:
                         self.tree_media.set(child, self.Column.DESTINATION,
                                             os.sep.join([dest_new, self.tree_media.set(child, self.Column.TITLE)]))
 
-        if self.tree_media.identify_column(x) == self.Column.TITLE:
+        if self.tree_media.identify_column(x) == self.Column.TITLE and status_ok:
             title_old = self.tree_media.set(item, self.Column.TITLE)
-            title_new = sdiag.askstring(
-                'Edit title', 'Enter new title', initialvalue=title_old)
+            title_new = askstring(
+                'Edit title', 'Enter new title:', initialvalue=title_old, x=x, y=y, parent=parent)
             if title_new:
                 self.tree_media.set(item, self.Column.TITLE, title_new)
                 self.tree_media.set(item, self.Column.DESTINATION,
@@ -407,9 +474,9 @@ class App:
                             self.tree_media.set(child, self.Column.DESTINATION,
                                                 self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
 
-        if self.tree_media.identify_column(x) == self.Column.URL and self.tree_media.set(item, self.Column.STATUS) == dl.Status.ERROR_URL.value:
-            url_new = sdiag.askstring('Edit URL', 'Enter new URL', initialvalue=
-                self.tree_media.item(item, option='text'))
+        if self.tree_media.identify_column(x) == self.Column.URL and not status_ok:
+            url_new = askstring('Edit URL', 'Enter new URL:',
+                                initialvalue=self.tree_media.item(item, option='text'), x=x, y=y)
             if url_new:
                 self.update_tree_media(url_new)
 
