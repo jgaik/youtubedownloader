@@ -1,13 +1,18 @@
 import youtube_dl as yt
-import enum
 
 
-class Type(enum.Enum):
-    PLAYLIST = enum.auto()
-    SINGLE = enum.auto()
+class Format:
+    AUDIO = "audio"
+    VIDEO = "video"
+    BOTH = "audio/video"
 
 
-class Status(enum.Enum):
+class Type:
+    PLAYLIST = 1
+    SINGLE = 0
+
+
+class Status:
     ERROR_URL = "URL Error"
     ERROR_DOWNLOAD = "Download Error"
     OK = "Ok"
@@ -18,10 +23,10 @@ class Status(enum.Enum):
 class Media:
 
     def __init__(self, url='', title='', status=Status.OK, idx=0):
-      self.url = url
-      self.title = title
-      self.status = status
-      self.idx = idx
+        self.url = url
+        self.title = title
+        self.status = status
+        self.idx = idx
 
 
 class Downloader:
@@ -34,9 +39,8 @@ class Downloader:
         with yt.YoutubeDL(opts) as ytd:
             data_all = ytd.extract_info(url, download=False)
 
-        
         if data_all is None:
-            self.media = Media(url = url, status = Status.ERROR_URL)
+            self.media = Media(url=url, status=Status.ERROR_URL)
             self.type = Type.SINGLE
         else:
             self.media = Media(url=data_all["id"],
@@ -45,14 +49,16 @@ class Downloader:
                 medialist = data_all["entries"]
                 self.count = 0
                 self.type = Type.PLAYLIST
+                self.playlist_idx = []
                 self.media_list = []
                 self.media.status = Status.OK
                 for media in medialist:
                     if not media is None:
                         self.media_list.append(
                             Media(url=media["id"],
-                                    title=media["title"],
-                                    idx=self.count))
+                                  title=media["title"],
+                                  idx=self.count))
+                        self.playlist_idx.append(self.count)
                     self.count += 1
                 if not self.media_list:
                     self.type = Type.SINGLE
@@ -62,7 +68,22 @@ class Downloader:
                 self.media.status = Status.OK
 
     def start(self):
-        pass
+        opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+            }],
+            'progress_hooks': [self.update],
+            'ignoreerrors': True
+        }
+        with yt.YoutubeDL(opts) as ydl:
+            ydl.download(self.media.url)
 
-    def update(self):
-        pass
+    def update(self, download):
+        if download['status'] == 'finished':
+            self.media.status = Status.DONE
+        if download['status'] == 'error':
+            self.media.status = Status.ERROR_DOWNLOAD
+        if download['status'] == 'downloading':
+            self.media.status == Status.DOWNLOAD
