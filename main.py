@@ -69,6 +69,35 @@ def askstring(title, prompt, initialvalue, **kw):
     return d.result
 
 
+class ThreadCounter:
+
+    def __init__(self):
+        self._lock_counter = th.Lock()
+        self._lock_task = th.Lock()
+        self.counter = 0
+
+    def start(self):
+        self._lock_task.acquire()
+
+    def started(self):
+        return self._lock_task.locked()
+
+    def finished(self):
+        return not self._lock_task.locked()
+
+    def increment(self):
+        assert self._lock_task.locked(), f"Task finished unexpectedly"
+        with self._lock_counter:
+            self.counter += 1
+
+    def decrement(self):
+        assert self._lock_task.locked(), f"Task finished unexpectedly"
+        with self._lock_counter:
+            self.counter -= 1
+            if self.counter == 0:
+                self._lock_task.release()
+
+
 class App:
 
     class Column:
@@ -93,9 +122,11 @@ class App:
 
     def __init__(self, master):
         self.master = master
-        self._queue_media = q.Queue()
-        self._flag_update = False
-        self._flag_download = False
+        self._queue_media = q.SimpleQueue()
+        self._tcounter_update = ThreadCounter()
+        self._executor_update = concurr.ThreadPoolExecutor()
+        self._tcounter_download = ThreadCounter()
+        self._executor_download = concurr.ThreadPoolExecutor()
 
         self.map_media = {}
 
@@ -107,7 +138,8 @@ class App:
         self.style_progress = ttk.Style(self.master)
         self.style_progress.layout('Horizontal.TProgressbar',
                                    [('Horizontal.Progressbar.trough', {
-                                       'children': [('Horizontal.Progressbar.pbar', {'side': 'left', 'sticky': 'ns'})],
+                                       'children': [('Horizontal.Progressbar.pbar', {'side': 'left',
+                                                                                     'sticky': 'ns'})],
                                        'sticky': 'nswe'}),
                                        ('Horizontal.Profressbar.label', {'sticky': ''})])
 
@@ -119,7 +151,8 @@ class App:
         self.var_check_audio = tk.StringVar()
         self.var_check_audio.set(dl.Format.VIDEO)
         self.check_audio = ttk.Checkbutton(self.frame_add, text="Audio only (mp3)",
-                                           onvalue=dl.Format.AUDIO, offvalue=dl.Format.VIDEO, variable=self.var_check_audio, command=self.event_check_audio)
+                                           onvalue=dl.Format.AUDIO, offvalue=dl.Format.VIDEO,
+                                           variable=self.var_check_audio, command=self.event_check_audio)
 
         # frame_dir - default directory
         label_dir_default = ttk.Label(
@@ -169,7 +202,7 @@ class App:
         self.tree_media.column(self.Column.DESTINATION,
                                minwidth=100, stretch=True)
 
-        self.progress_info = ttk.Progressbar(self.frame_view)
+        self.progress_info = ttk.Progressbar(self.frame_view, maximum=0)
 
         # layout settings
         # mainframe
@@ -241,9 +274,11 @@ class App:
         self.progress_info['maximum'] = 0
 
     def event_add(self, url=None):
-        self.progress_prepare(text='Retrieving info..')
-        if not self._flag_download:
-            self._flag_update = True
+        if self._tcounter_download.finished():
+            self.progress_prepare(text='Retrieving info..')
+            if not self._tcounter_update.started():
+                self._tcounter_update.start()
+                self._executor_update.submit(self.thread_update_tree)
             if url is None:
                 # url = pyperclip.paste()
                 url = 'https://youtu.be/JKHTdzAvI, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
@@ -251,16 +286,18 @@ class App:
                 self.progress_prepare(len(url))
             else:
                 self.progress_prepare(1)
-            th.Thread(target=self.thread_url_parser, args=(url,)).start()
-            th.Thread(target=self.thread_update_tree).start()
+            self._executor_update.submit(self.thread_url_parser, url)
 
     def thread_url_parser(self, url_data):
+        self._tcounter_update.increment()
         with concurr.ThreadPoolExecutor() as executor:
             if isinstance(url_data, MutableSequence):
-                executor.map(self.queue_media_info, [(u, None) for u in url_data])
+                executor.map(self.queue_media_info, [
+                             (u, None) for u in url_data])
             else:
-                executor.submit(self.queue_media_info, (url_data, self.tree_media.focus()))
-        self._flag_update = False
+                executor.submit(self.queue_media_info,
+                                (url_data, self.tree_media.focus()))
+        self._tcounter_update.decrement()
 
     def queue_media_info(self, url_tuple):
         self._queue_media.put((dl.Downloader(url_tuple[0]), url_tuple[1]))
@@ -272,7 +309,7 @@ class App:
             else:
                 return 'unchecked'
 
-        while self._flag_update:
+        while not self._tcounter_update.finished() or not self._queue_media.empty():
             (media_new, id_change) = self._queue_media.get()
 
             dest = ""
@@ -346,36 +383,34 @@ class App:
         self.progress_reset()
 
     def event_download(self):
-        if not self._flag_download and not self._flag_update:
+        if self._tcounter_update.finished():
             items = [item for item in self.tree_media.get_children()
                      if not 'unchecked' in self.tree_media.item(item)['tags']]
-            th.Thread(target=self.thread_download_tree, args=(items,)).start()
+            if not self._tcounter_download.started():
+                self._tcounter_download.start()
+                self._executor_download.map(self.thread_download_media, items)
 
     def event_clear(self):
-        self.tree_media.delete(*self.tree_media.get_children())
-        self.map_media = {}
-
-    def thread_download_tree(self, items):
-        self._flag_download = True
-        with concurr.ThreadPoolExecutor() as executor:
-            executor.map(self.thread_download_media, items)
-        self._flag_download = False
+        if self._tcounter_update.finished() and self._tcounter_download.finished():
+            self.tree_media.delete(*self.tree_media.get_children())
+            self.map_media = {}
 
     def thread_download_media(self, item):
+        self._tcounter_download.increment()
         downloader = self.map_media[item]
-        print(downloader)
         if downloader.type == dl.Type.PLAYLIST:
             pass
         if downloader.type == dl.Type.SINGLE:
             name = self.tree_media.set(item, self.Column.TITLE)
-            dest = self.tree_media.set(item, self.Column.DESTINATION).replace('~', self.var_dir_default.get()).replace(name,'')
-            th.Thread(target=downloader.start, args=(self.tree_media.set(item, self.Column.FORMAT), name,dest)).start()
+            dest = self.tree_media.set(item, self.Column.DESTINATION).replace(
+                '~', self.var_dir_default.get()).replace(name, '')
+            th.Thread(target=downloader.start, args=(
+                self.tree_media.set(item, self.Column.FORMAT), name, dest)).start()
             self.tree_media.set(item, self.Column.STATUS, dl.Status.DOWNLOAD)
             downloader.wait_download()
-            self.tree_media.set(item, self.Column.STATUS, downloader.media.status)
-
-
-
+            self.tree_media.set(item, self.Column.STATUS,
+                                downloader.media.status)
+        self._tcounter_download.decrement()
 
     def event_tree_click(self, event):
         x, y, widget = event.x, event.y, event.widget
@@ -495,7 +530,7 @@ class App:
                             self.tree_media.set(child, self.Column.DESTINATION,
                                                 self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
 
-        if self.tree_media.identify_column(x) == self.Column.URL and not status_ok and not self._flag_update:
+        if self.tree_media.identify_column(x) == self.Column.URL and not status_ok:
             url_new = askstring('Edit URL', 'Enter new URL:',
                                 initialvalue=self.tree_media.item(item, option='text'))
             if url_new:

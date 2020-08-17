@@ -1,6 +1,7 @@
 import youtube_dl as yt
 import threading as th
 
+
 class Format:
     AUDIO = "audio"
     VIDEO = "video"
@@ -27,6 +28,7 @@ class Media:
         self.title = title
         self.status = status
         self.idx = idx
+
 
 class Downloader:
 
@@ -84,7 +86,7 @@ class Downloader:
                 ydl.download([self.media.url])
             self.media.status = Status.DONE
             self._flag_download.set()
-        except e:
+        except:
             self.media.status = Status.ERROR_DOWNLOAD
             self._flag_download.set()
 
