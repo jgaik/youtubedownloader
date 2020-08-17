@@ -1,5 +1,5 @@
 import youtube_dl as yt
-
+import threading as th
 
 class Format:
     AUDIO = "audio"
@@ -28,15 +28,15 @@ class Media:
         self.status = status
         self.idx = idx
 
-
 class Downloader:
 
     def __init__(self, url):
         self._error = False
-        opts = {
+        self._flag_download = th.Event()
+        self.opts = {
             'ignoreerrors': True
         }
-        with yt.YoutubeDL(opts) as ytd:
+        with yt.YoutubeDL(self.opts) as ytd:
             data_all = ytd.extract_info(url, download=False)
 
         if data_all is None:
@@ -67,23 +67,26 @@ class Downloader:
                 self.type = Type.SINGLE
                 self.media.status = Status.OK
 
-    def start(self):
+    def start(self, format, name, dest):
         opts = {
             'format': 'bestaudio/best',
+            '''
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
             }],
-            'progress_hooks': [self.update],
-            'ignoreerrors': True
+            '''
+            'ignoreerrors': False,
+            'simulate': False,
         }
-        with yt.YoutubeDL(opts) as ydl:
-            ydl.download(self.media.url)
-
-    def update(self, download):
-        if download['status'] == 'finished':
+        try:
+            with yt.YoutubeDL(opts) as ydl:
+                ydl.download([self.media.url])
             self.media.status = Status.DONE
-        if download['status'] == 'error':
+            self._flag_download.set()
+        except e:
             self.media.status = Status.ERROR_DOWNLOAD
-        if download['status'] == 'downloading':
-            self.media.status == Status.DOWNLOAD
+            self._flag_download.set()
+
+    def wait_download(self):
+        self._flag_download.wait()
