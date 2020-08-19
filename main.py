@@ -34,8 +34,6 @@ class AskString(sdiag.Dialog):
         self.entry.insert(0, self.initialvalue)
         self.entry.select_range(0, tk.END)
 
-        self.update()
-        self.geometry("+0+0")
         self.resizable(False, False)
         return self.entry
 
@@ -316,7 +314,7 @@ class App:
             format = self.var_check_audio.get()
             if media_new.type == dl.Type.SINGLE:
                 if media_new.media.status == dl.Status.OK:
-                    dest = os.sep.join(["~", media_new.media.title])
+                    dest = "~" + os.sep
                 else:
                     format = ""
                 if id_change:
@@ -367,9 +365,9 @@ class App:
                                                 tags='checked')
                 for m in media_new.media_list:
                     if self.var_check_subdir.get():
-                        d = os.sep.join([dest, m.title])
+                        d = dest + os.sep
                     else:
-                        d = os.sep.join(["~", m.title])
+                        d = "~" + os.sep
                     self.tree_media.insert(id, 'end', text=m.url,
                                            iid="_".join([id, str(m.idx)]),
                                            values=(
@@ -401,11 +399,13 @@ class App:
         if downloader.type == dl.Type.PLAYLIST:
             pass
         if downloader.type == dl.Type.SINGLE:
-            name = self.tree_media.set(item, self.Column.TITLE)
+            format = self.tree_media.set(item, self.Column.FORMAT)
+            downloader.media.title = self.tree_media.set(
+                item, self.Column.TITLE)
             dest = self.tree_media.set(item, self.Column.DESTINATION).replace(
-                '~', self.var_dir_default.get()).replace(name, '')
-            th.Thread(target=downloader.start, args=(
-                self.tree_media.set(item, self.Column.FORMAT), name, dest)).start()
+                '~', self.var_dir_default.get())
+            self._executor_download.submit(
+                downloader.start, format=format, dest=dest)
             self.tree_media.set(item, self.Column.STATUS, dl.Status.DOWNLOAD)
             downloader.wait_download()
             self.tree_media.set(item, self.Column.STATUS,
@@ -424,7 +424,7 @@ class App:
         else:
             return
         if "image" in elem or (self.tree_media.identify_column(x) == self.Column.URL and not "Treeitem.indicator" in elem):
-            if self.tree_media.set(item, self.Column.STATUS) == dl.Status.OK:
+            if self.tree_media.set(item, self.Column.STATUS) == dl.Status.OK or children:
                 if self.tree_media.tag_has("unchecked", item) or self.tree_media.tag_has("tristate", item):
                     self.tree_media._check_ancestor(item)
                     self.tree_media._check_descendant(item)
@@ -484,37 +484,28 @@ class App:
                 children = self.tree_media.get_children(item)
         else:
             return
-        if self.tree_media.identify_column(x) == self.Column.DESTINATION:
-            if not parent:
-                dest = self.tree_media.set(item, self.Column.DESTINATION)
-                dir = dest.replace('~', self.var_dir_default.get())
-                prev = dir.rfind(os.sep)
-                if children and not os.path.isdir(dir) or not children:
-                    dir = dir[0:prev]
-            else:
-                dest = self.tree_media.set(parent, self.Column.DESTINATION)
-                if not os.path.isdir(dir := dest.replace('~', self.var_dir_default.get())):
-                    prev = dir.rfind(os.sep)
-                    dir = dir[0:prev]
-            dir_new = fdiag.askdirectory(initialdir=dir, mustexist=True)
+        if self.tree_media.identify_column(x) == self.Column.DESTINATION and status_ok:
+            dest = self.tree_media.set(parent, self.Column.DESTINATION).replace(
+                '~', self.var_dir_default.get())
+            dir_new = fdiag.askdirectory(initialdir=dest, mustexist=True)
             if dir_new:
                 dest_new = dir_new.replace(self.var_dir_default.get(), '~')
                 if not parent:
                     if not children:
-                        self.tree_media.set(item, self.Column.DESTINATION,
-                                            os.sep.join([dest_new, self.tree_media.set(item, self.Column.TITLE)]))
+                        self.tree_media.set(
+                            item, self.Column.DESTINATION, dest_new + os.sep)
                     else:
                         self.tree_media.set(
                             item, self.Column.DESTINATION, dest_new)
                         for child in children:
-                            self.tree_media.set(child, self.Column.DESTINATION,
-                                                os.sep.join([dest_new, self.tree_media.set(child, self.Column.TITLE)]))
+                            self.tree_media.set(
+                                child, self.Column.DESTINATION, dest_new + os.sep)
                 else:
                     self.tree_media.set(
                         parent, self.Column.DESTINATION, dest_new)
                     for child in self.tree_media.get_children(parent):
-                        self.tree_media.set(child, self.Column.DESTINATION,
-                                            os.sep.join([dest_new, self.tree_media.set(child, self.Column.TITLE)]))
+                        self.tree_media.set(
+                            child, self.Column.DESTINATION, dest_new + os.sep)
 
         if self.tree_media.identify_column(x) == self.Column.TITLE and status_ok:
             title_old = self.tree_media.set(item, self.Column.TITLE)
@@ -550,7 +541,7 @@ class App:
 
     def event_dir_default(self, event=None):
         dir = fdiag.askdirectory(
-            initialdir=self.var_dir_default.get(), mustexist=True)
+            initialdir=self.var_dir_default.get(), mustexist=False)
         if dir:
             self.var_dir_default.set(dir)
 
