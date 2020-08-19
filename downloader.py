@@ -1,5 +1,6 @@
 import youtube_dl as yt
 import threading as th
+import os
 
 
 class Format:
@@ -35,10 +36,7 @@ class Downloader:
     def __init__(self, url):
         self._error = False
         self._flag_download = th.Event()
-        self.opts = {
-            'ignoreerrors': True
-        }
-        with yt.YoutubeDL(self.opts) as ytd:
+        with yt.YoutubeDL({'ignoreerrors': True}) as ytd:
             data_all = ytd.extract_info(url, download=False)
 
         if data_all is None:
@@ -69,26 +67,35 @@ class Downloader:
                 self.type = Type.SINGLE
                 self.media.status = Status.OK
 
-    def start(self, format, name, dest):
+    def start(self, **kwargs):
         opts = {
             'format': 'bestaudio/best',
-            '''
-            'postprocessors': [{
+            'quiet': True,
+            'progress_hooks': [self.hook],
+            'ignoreerrors': True,
+        }
+        out = kwargs['dest'] + "%(id)s"
+        if kwargs['format'] == Format.AUDIO:
+            out += ".mp3"
+            opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-            }],
-            '''
-            'ignoreerrors': False,
-            'simulate': False,
-        }
-        try:
-            with yt.YoutubeDL(opts) as ydl:
-                ydl.download([self.media.url])
-            self.media.status = Status.DONE
-            self._flag_download.set()
-        except:
-            self.media.status = Status.ERROR_DOWNLOAD
-            self._flag_download.set()
+            }]
+        if kwargs['format'] == Format.VIDEO:
+            out += ".mp4"
+        opts['outtmpl'] = out
+        with yt.YoutubeDL(opts) as ydl:
+            ydl.download([self.media.url])
 
     def wait_download(self):
         self._flag_download.wait()
+
+    def hook(self, d):
+        if d['status'] == 'finished':
+            self.media.status = Status.DONE
+            os.rename(d['filename'], d['filename'].replace(
+                self.media.url, self.media.title))
+            self._flag_download.set()
+        if d['status'] == 'error':
+            self.media.status = Status.ERROR_DOWNLOAD
+            self._flag_download.set()
