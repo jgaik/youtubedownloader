@@ -10,7 +10,7 @@ import threading as th
 import concurrent.futures as concurr
 import queue as q
 import os
-from collections.abc import MutableSequence
+from collections.abc import MutableSequence, Sequence
 
 
 class AskString(sdiag.Dialog):
@@ -291,10 +291,10 @@ class App:
         with concurr.ThreadPoolExecutor() as executor:
             if isinstance(url_data, MutableSequence):
                 executor.map(self.queue_media_info, [
-                             (u, None) for u in url_data])
+                             (u, 'end') for u in url_data])
             else:
                 executor.submit(self.queue_media_info,
-                                (url_data, self.tree_media.focus()))
+                                (url_data, self.tree_media.index(self.tree_media.focus())))
         self._tcounter_update.decrement()
 
     def queue_media_info(self, url_tuple):
@@ -310,73 +310,49 @@ class App:
         while not self._tcounter_update.finished() or not self._queue_media.empty():
             (media_new, id_change) = self._queue_media.get()
 
-            dest = ""
             format = self.var_check_audio.get()
-            if media_new.type == dl.Type.SINGLE:
-                if media_new.media.status == dl.Status.OK:
+            if not isinstance(media_new, Sequence):
+                if media_new.status == dl.Status.OK:
                     dest = "~" + os.sep
                 else:
                     format = ""
-                if id_change:
-                    id = id_change
-                    data = {
-                        'text': media_new.media.url,
-                        'values': (
-                            media_new.media.status,
-                            media_new.media.title,
-                            format,
-                            dest),
-                        'tags': statuscheck(media_new.media)
-                    }
-                    self.tree_media.item(id, **data)
-                else:
-                    id = self.tree_media.insert('', 'end', text=media_new.media.url,
-                                                values=(
-                                                    media_new.media.status,
-                                                    media_new.media.title,
-                                                    format,
-                                                    dest),
-                                                tags=statuscheck(media_new.media))
-            if media_new.type == dl.Type.PLAYLIST:
+                    dest = ""
+            
+                self.tree_media.insert('', id_change, iid=media_new.url, text=media_new.url,
+                                        values=(
+                                            media_new.status,
+                                            media_new.title,
+                                            format,
+                                            dest),
+                                        tags=statuscheck(media_new.media))
+                self.map_media[media_new.url] = media_new
+            else:
                 if self.var_check_subdir.get():
-                    dest = os.sep.join(["~", media_new.media.title])
+                    dest = os.sep.join(["~", media_new[0].title])
                 else:
                     dest = ""
-
-                if id_change:
-                    id = id_change
-                    data = {
-                        'text': media_new.media.url,
-                        'values': (
-                            f"Extracted {len(media_new.media_list)} of {media_new.count}",
-                            media_new.media.title,
-                            format,
-                            dest),
-                        'tags': statuscheck(media_new.media)
-                    }
-                    self.tree_media.item(id, **data)
-                else:
-                    id = self.tree_media.insert('', 'end', text=media_new.media.url,
-                                                values=(
-                                                    f"Extracted {len(media_new.media_list)} of {media_new.count}",
-                                                    media_new.media.title,
-                                                    format,
-                                                    dest),
-                                                tags='checked')
-                for m in media_new.media_list:
+                self.tree_media.insert('', id_change, text=media_new[0].url,
+                                        iid=media_new[0].url,
+                                        values=(
+                                            f"Extracted {len(media_new[1])} of {media_new[0].count}",
+                                            media_new[0].title,
+                                            format,
+                                            dest),
+                                        tags='checked')
+                for m in media_new[1]:
                     if self.var_check_subdir.get():
                         d = dest + os.sep
                     else:
                         d = "~" + os.sep
-                    self.tree_media.insert(id, 'end', text=m.url,
-                                           iid="_".join([id, str(m.idx)]),
+                    self.tree_media.insert(media_new[0].url, 'end', text=m.url,
+                                           iid=m.url,
                                            values=(
                                                m.status,
                                                m.title,
                                                self.var_check_audio.get(),
                                                d),
                                            tags=statuscheck(m))
-            self.map_media[id] = media_new
+                    self.map_media[m.url] = m
             self.progress_update()
         self.progress_reset()
 
