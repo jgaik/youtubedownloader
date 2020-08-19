@@ -1,7 +1,9 @@
 import youtube_dl as yt
-import threading as th
+from threading import Event
 import os
 from collections.abc import Sequence
+import json
+
 
 def extractMedia(url):
     opts = {
@@ -18,10 +20,11 @@ def extractMedia(url):
     else:
         if "entries" in data_all:
             media = Media(url=data_all["id"],
-                                title=data_all["title"], downloader=False)
+                          title=data_all["title"], downloader=False)
             medialist = data_all["entries"]
-            media_list = [Media(url=m["id"], title=m["title"]) for m in medialist if not m is None]
-            if not self.media_list:
+            media_list = [Media(url=m["id"], title=m["title"])
+                          for m in medialist if not m is None]
+            if not media_list:
                 media.status = Status.ERROR_URL
                 media_out = media
             else:
@@ -31,6 +34,7 @@ def extractMedia(url):
             media = Media(url=data_all["id"], title=data_all["title"])
             media_out = media
     return media_out
+
 
 class Format:
     AUDIO = "audio"
@@ -55,7 +59,7 @@ class Media:
         self.format = None
         self._downloadable = False
         if downloader:
-            self._flag_download = th.Event()
+            self._flag_download = Event()
             self._downloadable = True
             opts = {
                 'format': 'bestaudio/best',
@@ -64,7 +68,7 @@ class Media:
                 'progress_hooks': [self.hook]
             }
             self._ydl = yt.YoutubeDL(opts)
-        
+
     def start_download(self, dest):
         if self._downloadable:
             self._ydl.params['outtmpl'] = dest + "%(id)s"
@@ -77,16 +81,21 @@ class Media:
             if self.format == Format.VIDEO:
                 self._ydl.params['outtmpl'] += ".mp4"
             self._ydl.download([self.url])
-    
+
     def wait_download(self):
         self._flag_download.wait()
 
     def hook(self, dl_data):
-        if d['status'] == 'finished':
+        if dl_data['status'] == 'finished':
             self.status = Status.DONE
-            os.rename(d['filename'], d['filename'].replace(
+            os.rename(dl_data['filename'], dl_data['filename'].replace(
                 self.url, self.title))
             self._flag_download.set()
-        if d['status'] == 'error':
+        if dl_data['status'] == 'error':
             self.status = Status.ERROR_DOWNLOAD
             self._flag_download.set()
+
+    def __repr__(self):
+        dic = self.__dict__
+        keys = [k for k in dic.keys() if k[0] != "_"]
+        return json.dumps({'class': self.__class__.__name__, 'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
