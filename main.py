@@ -95,6 +95,10 @@ class ThreadCounter:
             if self.counter == 0:
                 self._lock_task.release()
 
+    def get_count(self):
+        with self._lock_counter:
+            return count
+
 
 class App:
 
@@ -276,7 +280,7 @@ class App:
             self.progress_prepare(text='Retrieving info..')
             if not self._tcounter_update.started():
                 self._tcounter_update.start()
-                self._executor_update.submit(self.thread_update_tree)
+                self._executor_update.submit(self.thread_tree_add)
             if url is None:
                 # url = pyperclip.paste()
                 url = 'https://youtu.be/JKHTdzAvI, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
@@ -303,7 +307,7 @@ class App:
              url_tuple[1])
         )
 
-    def thread_update_tree(self):
+    def thread_tree_add(self):
         def statuscheck(media):
             if media.status == dl.Status.OK:
                 return 'checked'
@@ -360,11 +364,12 @@ class App:
         self.progress_reset()
 
     def event_download(self):
-        if self._tcounter_update.finished():
+        if self._tcounter_update.finished() and not self._tcounter_download.started():
             items = [item for item in self.tree_media.get_checked()]
-            if not self._tcounter_download.started():
+            if len(items) > 0:
+                self.progress_prepare(text="Downloading media..", max=len(items))
                 self._tcounter_download.start()
-                self._executor_download.map(self.thread_download_media, items)
+                self._executor_download.submit(self.thread_tree_update, items)
 
     def event_clear(self):
         if self._tcounter_update.finished() and self._tcounter_download.finished():
@@ -374,34 +379,48 @@ class App:
     def thread_download_media(self, item):
         self._tcounter_download.increment()
         media = self.map_media[item]
-        print(media)
+        dest = self.tree_media.set(item, self.Column.DESTINATION).replace("~", self.var_dir_default.get())
+        media.start_download(dest)
+        media.wait_download()
+        self._queue_media.put((item, media.status))
         self._tcounter_download.decrement()
 
-        '''
-        if downloader.type == dl.Type.PLAYLIST:
-            pass
-        if downloader.type == dl.Type.SINGLE:
-            format = self.tree_media.set(item, self.Column.FORMAT)
-            downloader.media.title = self.tree_media.set(
-                item, self.C} of {media_new[0].count}",
-                    media_new[0].title,
-                    format,
-                    dest),
-                    tags='checked')olumn.TITLE)
-            dest = self.tree_media.set(item, self.Column.DESTINATION).replace(
-                '~', self.var_dir_default.get())
-            self._executor_download.submit(
-                downloader.start, format=format, dest=dest)
+    def thread_tree_update(self, items):
+        parents = {}
+        for item in items:
             self.tree_media.set(item, self.Column.STATUS, dl.Status.DOWNLOAD)
-            downloader.wait_download()
-            self.tree_media.set(item, self.Column.STATUS,
-                                downloader.media.status)
-        '''
+            parent = self.tree_media.parent(item)
+            if parent:
+                if parent in parents:
+                    parents[parent] += 1
+                else:
+                    parents[parent] = 1 
+
+        for (parent, num) in parents.items():
+            self.tree_media.set(parent, self.Column.STATUS, f"Downloading {num}")
+
+        self._executor_download.map(self.thread_download_media, items)
+       
+        while not self._tcounter_download.finished() or not self._queue_media.empty():
+            (id, status) = self._queue_media.get()
+            parent = self.tree_media.parent(id)
+            if parent in parents:
+                parents[parent] -= 1
+                if (num:=parents[parent]) == 0:
+                    self.tree_media.set(parent, self.Column.STATUS, dl.Status.DONE)
+                else:
+                    self.tree_media.set(parent, self.Column.STATUS, f"Downloading {num}")
+            self.tree_media.set(id, self.Column.STATUS, status)
+            self.tree_media.item(id)['tags'] = 'unchecked'
+            self.tree_media._uncheck_ancestor(id)
+            self.progress_update()
+        self.progress_reset()  
 
     def event_tree_click(self, event):
         x, y, widget = event.x, event.y, event.widget
         elem = widget.identify("element", x, y)
         item = self.tree_media.identify_row(y)
+        children = None
         if item != "":
             val = self.tree_media.set(item, self.Column.FORMAT)
             parent = self.tree_media.parent(item)
