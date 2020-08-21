@@ -420,138 +420,31 @@ class App:
         x, y, widget = event.x, event.y, event.widget
         elem = widget.identify("element", x, y)
         item = self.tree_media.identify_row(y)
-        children = None
         if item != "":
-            val = self.tree_media.set(item, self.Column.FORMAT)
-            parent = self.tree_media.parent(item)
-            if not parent:
-                children = self.tree_media.get_children(item)
-        else:
-            return
-        if "image" in elem or (self.tree_media.identify_column(x) == self.Column.URL and not "Treeitem.indicator" in elem):
-            if self.tree_media.set(item, self.Column.STATUS) == dl.Status.OK or children:
-                if self.tree_media.tag_has("unchecked", item) or self.tree_media.tag_has("tristate", item):
-                    self.tree_media._check_ancestor(item)
-                    self.tree_media._check_descendant(item)
-                else:
-                    self.tree_media._uncheck_descendant(item)
-                    self.tree_media._uncheck_ancestor(item)
+            if "image" in elem or (self.tree_media.identify_column(x) == self.Column.URL and not "Treeitem.indicator" in elem):
+                self.change_item_check(item)
 
-        if self.tree_media.identify_column(x) == self.Column.FORMAT:
-            if val == dl.Format.AUDIO:
-                self.tree_media.set(
-                    item, self.Column.FORMAT, dl.Format.VIDEO)
-                if parent:
-                    self.map_media[item].format = dl.Format.VIDEO
-                    if all([self.tree_media.set(v, self.Column.FORMAT) == dl.Format.VIDEO for v in self.tree_media.get_children(parent)]):
-                        self.tree_media.set(
-                            parent, self.Column.FORMAT, dl.Format.VIDEO)
-                    else:
-                        self.tree_media.set(
-                            parent, self.Column.FORMAT, dl.Format.BOTH)
-                else:
-                    if children:
-                        for child in children:
-                            self.tree_media.set(
-                                child, self.Column.FORMAT, dl.Format.VIDEO)
-                            self.map_media[child].format = dl.Format.VIDEO
-                    else:
-                        self.map_media[item].format = dl.Format.VIDEO
-            else:
-                self.tree_media.set(
-                    item, self.Column.FORMAT, dl.Format.AUDIO)
-                if parent:
-                    self.map_media[item].format = dl.Format.AUDIO
-                    if all([self.tree_media.set(v, self.Column.FORMAT) == dl.Format.AUDIO for v in self.tree_media.get_children(parent)]):
-                        self.tree_media.set(
-                            parent, self.Column.FORMAT, dl.Format.AUDIO)
-                    else:
-                        self.tree_media.set(
-                            parent, self.Column.FORMAT, dl.Format.BOTH)
-                else:
-                    if children:
-                        for child in children:
-                            self.tree_media.set(
-                                child, self.Column.FORMAT, dl.Format.AUDIO)
-                            self.map_media[child].format = dl.Format.AUDIO
-                    else:
-                        self.map_media[item].format = dl.Format.AUDIO
-            if val == dl.Format.BOTH:
-                self.tree_media.set(
-                    item, self.Column.FORMAT, dl.Format.VIDEO)
-                for child in children:
-                    self.tree_media.set(
-                        child, self.Column.FORMAT, dl.Format.VIDEO)
-                    self.map_media[child].format = dl.Format.VIDEO
-
-            if all([self.tree_media.set(i, self.Column.FORMAT) == dl.Format.AUDIO for i in self.tree_media.get_children()]):
-                self.var_check_audio.set(dl.Format.AUDIO)
-            else:
-                self.var_check_audio.set(dl.Format.VIDEO)
+            if self.tree_media.identify_column(x) == self.Column.FORMAT:
+                self.change_item_format(item)
+                self.change_check_audio()
+                
 
     def event_tree_doubleclick(self, event):
         x, y = event.x, event.y
         item = self.tree_media.identify_row(y)
         if item != "":
-            parent = self.tree_media.parent(item)
-            status_ok = not self.tree_media.set(
-                item, self.Column.STATUS) == dl.Status.ERROR_URL
-            if not parent:
-                children = self.tree_media.get_children(item)
-        else:
-            return
-        if self.tree_media.identify_column(x) == self.Column.DESTINATION and status_ok:
-            dest = self.tree_media.set(parent, self.Column.DESTINATION).replace(
-                '~', self.var_dir_default.get())
-            dir_new = fdiag.askdirectory(initialdir=dest, mustexist=True)
-            if dir_new:
-                dest_new = dir_new.replace(self.var_dir_default.get(), '~')
-                if not parent:
-                    if not children:
-                        self.tree_media.set(
-                            item, self.Column.DESTINATION, dest_new + os.sep)
-                    else:
-                        self.tree_media.set(
-                            item, self.Column.DESTINATION, dest_new)
-                        for child in children:
-                            self.tree_media.set(
-                                child, self.Column.DESTINATION, dest_new + os.sep)
-                else:
-                    self.tree_media.set(
-                        parent, self.Column.DESTINATION, dest_new)
-                    for child in self.tree_media.get_children(parent):
-                        self.tree_media.set(
-                            child, self.Column.DESTINATION, dest_new + os.sep)
+            if self.tree_media.identify_column(x) == self.Column.DESTINATION:
+                self.change_item_destination(item)
 
-        if self.tree_media.identify_column(x) == self.Column.TITLE and status_ok:
-            title_old = self.tree_media.set(item, self.Column.TITLE)
-            title_new = askstring(
-                'Edit title', 'Enter new title:', initialvalue=title_old, parent=parent)
-            if title_new:
-                self.tree_media.set(item, self.Column.TITLE, title_new)
-                self.tree_media.set(item, self.Column.DESTINATION,
-                                    self.tree_media.set(item, self.Column.DESTINATION).replace(title_old, title_new))
-                if not parent:
-                    if children:
-                        for child in children:
-                            self.tree_media.set(child, self.Column.DESTINATION,
-                                                self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
-                    else:
-                        self.map_media[item].title = title_new
-                else:
-                    self.map_media[item].title = title_new
+            if self.tree_media.identify_column(x) == self.Column.TITLE:
+                self.change_item_title(item)
 
-        if self.tree_media.identify_column(x) == self.Column.URL and not status_ok:
-            url_new = askstring('Edit URL', 'Enter new URL:',
-                                initialvalue=self.tree_media.item(item, option='text'))
-            if url_new:
-                self.event_add(url_new)
-                self.tree_media.delete(self.tree_media.focus())
-                return
+            if not self.tree_media.identify_column(x) == self.Column.STATUS:
+                self.tree_media.item(item, open=not self.tree_media.item(item, 'open'))
 
-        if not self.tree_media.identify_column(x) == self.Column.STATUS:
-            self.tree_media.item(
-                item, open=not self.tree_media.item(item, 'open'))
+            if self.tree_media.identify_column(x) == self.Column.URL:
+                self.change_item_url(item)
+
 
     def event_check_audio(self):
         for child in self.tree_media.get_children():
@@ -565,6 +458,12 @@ class App:
                         subchild, self.Column.FORMAT, self.var_check_audio.get())
                     self.map_media[subchild].format = self.var_check_audio.get()
 
+    def change_check_audio(self):
+        if all([self.tree_media.set(i, self.Column.FORMAT) == dl.Format.AUDIO for i in self.tree_media.get_children()]):
+            self.var_check_audio.set(dl.Format.AUDIO)
+        else:
+            self.var_check_audio.set(dl.Format.VIDEO)
+
     def event_dir_default(self, event=None):
         dir = fdiag.askdirectory(
             initialdir=self.var_dir_default.get(), mustexist=False)
@@ -577,6 +476,126 @@ class App:
     def event_dir_scroll_down(self, event):
         self.entry_dir_default.xview_scroll(1, tk.UNITS)
 
+    def change_item_destination(self, item):
+        dest = self.tree_media.set(item, self.Column.DESTINATION).replace('~', self.var_dir_default.get())
+        if parent := self.tree_media.parent(item):
+            parent_dest = self.tree_media.set(parent, self.Column.DESTINATION).replace('~', self.var_dir_default.get())
+            children = self.tree_media.get_children(parent)
+        else:
+            children = self.tree_media.get_children(item)
+            
+        dir_new = fdiag.askdirectory(initialdir=dest, mustexist=True)
+        if dir_new:
+            dest_new = dir_new.replace(self.var_dir_default.get(), '~') + os.sep
+            self.tree_media.set(item, self.Column.DESTINATION, dest_new)
+            if not parent and children:
+                    for child in children:
+                        self.tree_media.set(child, self.Column.DESTINATION, dest_new)
+            if parent:
+                self.tree_media.set(parent, self.Column.DESTINATION, "")
+                self.var_check_subdir.set(False)
+    
+    def change_item_title(self, item):
+        title_old = self.tree_media.set(item, self.Column.TITLE)
+        title_new = askstring('Edit title', 'Enter new title:', initialvalue=title_old)
+        if title_new:
+            self.tree_media.set(item, self.Column.TITLE, title_new)
+            
+            if not (parent := self.tree_media.parent(item)):
+                if children := self.tree_media.get_children(item):
+                    self.tree_media.set(item, self.Column.DESTINATION,
+                                self.tree_media.set(item, self.Column.DESTINATION).replace(title_old, title_new))
+                    for child in children:
+                        self.tree_media.set(child, self.Column.DESTINATION,
+                                            self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
+                else:
+                    self.map_media[item].title = title_new
+            else:
+                self.map_media[item].title = title_new
+
+    def change_item_check(self, item):
+        status = self.tree_media.set(item, self.Column.STATUS)
+        if not status in [dl.Status.DONE, dl.Status.ERROR_URL, dl.Status.DOWNLOAD]:
+            if parent := self.tree_media.parent(item):
+                if self.tree_media.tag_has("checked", item):
+                    self.tree_media.change_state(item, "unchecked")
+                else:
+                    self.tree_media.change_state(item, "checked")
+                children = self.tree_media.get_children(parent)
+                states = ["checked" in self.tree_media.item(c, "tags") for c in children]
+                if all(states):
+                    self.tree_media.change_state(parent, "checked")
+                else:
+                    if all(["unchecked" in self.tree_media.item(c, "tags") for c in children]):
+                        self.tree_media.change_state(parent, "unchecked")
+                    else:
+                        self.tree_media.change_state(parent, "tristate")
+            else:
+                if self.tree_media.tag_has("checked", item):
+                    self.tree_media.change_state(item, "unchecked")
+                    state = "unchecked"
+                else:
+                    self.tree_media.change_state(item, "checked")
+                    state="checked"
+                children = self.tree_media.get_children(item)
+                for c in children:
+                    self.tree_media.change_state(c, state)
+
+
+    def change_item_format(self, item):
+        if parent := self.tree_media.parent(item):
+            children = None
+        else:
+            children = self.tree_media.get_children(item)
+            
+        if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.AUDIO:
+            self.tree_media.set(item, self.Column.FORMAT, dl.Format.VIDEO)
+            if parent:
+                self.map_media[item].format = dl.Format.VIDEO
+                if all([self.tree_media.set(v, self.Column.FORMAT) == dl.Format.VIDEO for v in self.tree_media.get_children(parent)]):
+                    self.tree_media.set(parent, self.Column.FORMAT, dl.Format.VIDEO)
+                else:
+                    self.tree_media.set(parent, self.Column.FORMAT, dl.Format.BOTH)
+            else:
+                if children:
+                    for child in children:
+                        self.tree_media.set(child, self.Column.FORMAT, dl.Format.VIDEO)
+                        self.map_media[child].format = dl.Format.VIDEO
+                else:
+                    self.map_media[item].format = dl.Format.VIDEO
+
+        if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.VIDEO:
+            self.tree_media.set(item, self.Column.FORMAT, dl.Format.AUDIO)
+            if parent:
+                self.map_media[item].format = dl.Format.AUDIO
+                if all([self.tree_media.set(v, self.Column.FORMAT) == dl.Format.AUDIO for v in self.tree_media.get_children(parent)]):
+                    self.tree_media.set(
+                        parent, self.Column.FORMAT, dl.Format.AUDIO)
+                else:
+                    self.tree_media.set(
+                        parent, self.Column.FORMAT, dl.Format.BOTH)
+            else:
+                if children:
+                    for child in children:
+                        self.tree_media.set(
+                            child, self.Column.FORMAT, dl.Format.AUDIO)
+                        self.map_media[child].format = dl.Format.AUDIO
+                else:
+                    self.map_media[item].format = dl.Format.AUDIO
+
+        if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.BOTH:
+            self.tree_media.set(item, self.Column.FORMAT, dl.Format.VIDEO)
+            for child in children:
+                self.tree_media.set(child, self.Column.FORMAT, dl.Format.VIDEO)
+                self.map_media[child].format = dl.Format.VIDEO
+
+    def change_item_url(self, item):
+        if self.tree_media.set(item, self.Column.STATUS) == dl.Status.ERROR_URL:
+            url_new = askstring('Edit URL', 'Enter new URL:', initialvalue=self.tree_media.item(item, option='text'))
+            if url_new:
+                self.event_add(url_new)
+                self.tree_media.delete(self.tree_media.focus())
+            
 
 if __name__ == '__main__':
     root = tk.Tk()
