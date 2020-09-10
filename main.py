@@ -341,7 +341,7 @@ class App:
                     dest = ""
                 self.tree_media.insert('', id_change, text=media_new[0].url,
                                        iid=media_new[0].url,
-                                       values=(f"Extracted {len(media_new[1])} of {media_new[0].count}",
+                                       values=(f"Extracted {len(media_new[1])}/{media_new[0].count}",
                                                media_new[0].title,
                                                format,
                                                dest),
@@ -407,7 +407,10 @@ class App:
             if parent in parents:
                 parents[parent] -= 1
                 if (num:=parents[parent]) == 0:
-                    self.tree_media.set(parent, self.Column.STATUS, dl.Status.DONE)
+                    if all(dones:=[self.map_media[child].status == dl.Status.DONE for child in self.tree_media.get_children(parent)]):
+                        self.tree_media.set(parent, self.Column.STATUS, dl.Status.DONE)
+                    else:
+                        self.tree_media.set(parent, self.Column.STATUS, f"Downloaded {sum(dones)}/{len(dones)}")
                 else:
                     self.tree_media.set(parent, self.Column.STATUS, f"Downloading {num}")
             self.tree_media.set(id, self.Column.STATUS, status)
@@ -448,11 +451,14 @@ class App:
 
     def event_check_audio(self):
         for child in self.tree_media.get_children():
-            self.tree_media.set(child, self.Column.FORMAT,
-                                self.var_check_audio.get())
             if not (subchildren := self.tree_media.get_children(child)):
-                self.map_media[child].format = self.var_check_audio.get()
+                if child in self.map_media:
+                    self.map_media[child].format = self.var_check_audio.get()
+                    self.tree_media.set(child, self.Column.FORMAT,
+                                        self.var_check_audio.get())
             else:
+                self.tree_media.set(child, self.Column.FORMAT,
+                                    self.var_check_audio.get())
                 for subchild in subchildren:
                     self.tree_media.set(
                         subchild, self.Column.FORMAT, self.var_check_audio.get())
@@ -539,7 +545,8 @@ class App:
                     state="checked"
                 children = self.tree_media.get_children(item)
                 for c in children:
-                    self.tree_media.change_state(c, state)
+                    if self.map_media[c].status != dl.Status.DONE:
+                        self.tree_media.change_state(c, state)
 
 
     def change_item_format(self, item):
@@ -563,6 +570,7 @@ class App:
                         self.map_media[child].format = dl.Format.VIDEO
                 else:
                     self.map_media[item].format = dl.Format.VIDEO
+            return
 
         if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.VIDEO:
             self.tree_media.set(item, self.Column.FORMAT, dl.Format.AUDIO)
@@ -582,6 +590,7 @@ class App:
                         self.map_media[child].format = dl.Format.AUDIO
                 else:
                     self.map_media[item].format = dl.Format.AUDIO
+            return
 
         if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.BOTH:
             self.tree_media.set(item, self.Column.FORMAT, dl.Format.VIDEO)
