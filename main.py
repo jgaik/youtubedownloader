@@ -1,16 +1,17 @@
+# pylint: disable=attribute-defined-outside-init, C0114, C0115, C0116, invalid-name, unused-argument, redefined-builtin, line-too-long, superfluous-parens, protected-access
+import re
+import os
+import threading as th
+import concurrent.futures as concurr
+import queue as q
+from collections.abc import MutableSequence, Sequence
 import tkinter.simpledialog as sdiag
 import tkinter.filedialog as fdiag
 import tkinter as tk
 from tkinter import ttk
 import ttkwidgets
-# import pyperclip
+import pyperclip
 import downloader as dl
-import re
-import threading as th
-import concurrent.futures as concurr
-import queue as q
-import os
-from collections.abc import MutableSequence, Sequence
 
 
 class AskString(sdiag.Dialog):
@@ -84,12 +85,12 @@ class ThreadCounter:
         return not self._lock_task.locked()
 
     def increment(self):
-        assert self._lock_task.locked(), f"Task finished unexpectedly"
+        assert self._lock_task.locked(), "Task finished unexpectedly"
         with self._lock_counter:
             self.counter += 1
 
     def decrement(self):
-        assert self._lock_task.locked(), f"Task finished unexpectedly"
+        assert self._lock_task.locked(), "Task finished unexpectedly"
         with self._lock_counter:
             self.counter -= 1
             if self.counter == 0:
@@ -97,7 +98,7 @@ class ThreadCounter:
 
     def get_count(self):
         with self._lock_counter:
-            return count
+            return self.counter
 
 
 class App:
@@ -140,10 +141,11 @@ class App:
         self.style_progress = ttk.Style(self.master)
         self.style_progress.layout('Horizontal.TProgressbar',
                                    [('Horizontal.Progressbar.trough', {
-                                       'children': [('Horizontal.Progressbar.pbar', {'side': 'left',
-                                                                                     'sticky': 'ns'})],
+                                       'children': [
+                                           ('Horizontal.Progressbar.pbar', {'side': 'left',
+                                                                            'sticky': 'ns'})],
                                        'sticky': 'nswe'}),
-                                       ('Horizontal.Profressbar.label', {'sticky': ''})])
+                                    ('Horizontal.Profressbar.label', {'sticky': ''})])
 
         # widgets
         # frame_setup
@@ -154,13 +156,15 @@ class App:
         self.var_check_audio.set(dl.Format.VIDEO)
         self.check_audio = ttk.Checkbutton(self.frame_add, text="Audio only (mp3)",
                                            onvalue=dl.Format.AUDIO, offvalue=dl.Format.VIDEO,
-                                           variable=self.var_check_audio, command=self.event_check_audio)
+                                           variable=self.var_check_audio,
+                                           command=self.event_check_audio)
 
         # frame_dir - default directory
         label_dir_default = ttk.Label(
             self.frame_dir, text="Default directory:")
         self.var_dir_default = tk.StringVar()
-        self.var_dir_default.set(os.path.expanduser("~"))
+        self.var_dir_default.set(os.path.sep.join(
+            [os.path.expanduser('~'), "YouTube"]))
         self.entry_dir_default = ttk.Entry(
             self.frame_dir, textvariable=self.var_dir_default, state=tk.DISABLED)
         self.entry_dir_default.bind("<Double-1>", self.event_dir_default)
@@ -173,7 +177,8 @@ class App:
         self.var_check_subdir = tk.BooleanVar()
         self.var_check_subdir.set(True)
         self.check_subdir = ttk.Checkbutton(self.frame_dir, text="Playlists in subfolders",
-                                            onvalue=True, offvalue=False, variable=self.var_check_subdir)
+                                            onvalue=True, offvalue=False,
+                                            variable=self.var_check_subdir)
 
         # no subframe
         self.button_download = ttk.Button(
@@ -282,8 +287,7 @@ class App:
                 self._tcounter_update.start()
                 self._executor_update.submit(self.thread_tree_add)
             if url is None:
-                # url = pyperclip.paste()
-                url = 'https://youtu.be/JKHTdzAvI, https://www.youtube.com/watch?v=0MW0mDZysxc, https://www.youtube.com/playlist?list=PLiM-0FYH7IQ-awx_UzfJd6XwiZP--dnli, https://www.youtube.com/watch?v=Owx3gcvark8'
+                url = pyperclip.paste()
                 url = re.split(r'[\s,]+', url)
                 self.progress_prepare(len(url))
             else:
@@ -294,8 +298,8 @@ class App:
         self._tcounter_update.increment()
         with concurr.ThreadPoolExecutor() as executor:
             if isinstance(url_data, MutableSequence):
-                executor.map(self.queue_media_info, [
-                             (u, 'end') for u in url_data])
+                executor.map(
+                    self.queue_media_info, [(u, 'end') for u in url_data])
             else:
                 executor.submit(self.queue_media_info,
                                 (url_data, self.tree_media.index(self.tree_media.focus())))
@@ -341,10 +345,11 @@ class App:
                     dest = ""
                 self.tree_media.insert('', id_change, text=media_new[0].url,
                                        iid=media_new[0].url,
-                                       values=(f"Extracted {len(media_new[1])}/{media_new[0].count}",
-                                               media_new[0].title,
-                                               format,
-                                               dest),
+                                       values=(
+                                           f"Extracted {len(media_new[1])}/{media_new[0].count}",
+                                           media_new[0].title,
+                                           format,
+                                           dest),
                                        tags='checked')
                 for m in media_new[1]:
                     if self.var_check_subdir.get():
@@ -367,7 +372,8 @@ class App:
         if self._tcounter_update.finished() and not self._tcounter_download.started():
             items = [item for item in self.tree_media.get_checked()]
             if len(items) > 0:
-                self.progress_prepare(text="Downloading media..", max=len(items))
+                self.progress_prepare(
+                    text="Downloading media..", max=len(items))
                 self._tcounter_download.start()
                 self._executor_download.submit(self.thread_tree_update, items)
 
@@ -379,7 +385,8 @@ class App:
     def thread_download_media(self, item):
         self._tcounter_download.increment()
         media = self.map_media[item]
-        dest = self.tree_media.set(item, self.Column.DESTINATION).replace("~", self.var_dir_default.get())
+        dest = self.tree_media.set(item, self.Column.DESTINATION).replace(
+            "~", self.var_dir_default.get())
         media.start_download(dest)
         media.wait_download()
         self._queue_media.put((item, media.status))
@@ -394,30 +401,34 @@ class App:
                 if parent in parents:
                     parents[parent] += 1
                 else:
-                    parents[parent] = 1 
+                    parents[parent] = 1
 
         for (parent, num) in parents.items():
-            self.tree_media.set(parent, self.Column.STATUS, f"Downloading {num}")
+            self.tree_media.set(parent, self.Column.STATUS,
+                                f"Downloading {num}")
 
         self._executor_download.map(self.thread_download_media, items)
-       
+
         while not self._tcounter_download.finished() or not self._queue_media.empty():
             (id, status) = self._queue_media.get()
             parent = self.tree_media.parent(id)
             if parent in parents:
                 parents[parent] -= 1
-                if (num:=parents[parent]) == 0:
-                    if all(dones:=[self.map_media[child].status == dl.Status.DONE for child in self.tree_media.get_children(parent)]):
-                        self.tree_media.set(parent, self.Column.STATUS, dl.Status.DONE)
+                if (num := parents[parent]) == 0:
+                    if all(dones := [self.map_media[child].status == dl.Status.DONE for child in self.tree_media.get_children(parent)]):
+                        self.tree_media.set(
+                            parent, self.Column.STATUS, dl.Status.DONE)
                     else:
-                        self.tree_media.set(parent, self.Column.STATUS, f"Downloaded {sum(dones)}/{len(dones)}")
+                        self.tree_media.set(
+                            parent, self.Column.STATUS, f"Downloaded {sum(dones)}/{len(dones)}")
                 else:
-                    self.tree_media.set(parent, self.Column.STATUS, f"Downloading {num}")
+                    self.tree_media.set(
+                        parent, self.Column.STATUS, f"Downloading {num}")
             self.tree_media.set(id, self.Column.STATUS, status)
             self.tree_media.item(id)['tags'] = 'unchecked'
             self.tree_media._uncheck_ancestor(id)
             self.progress_update()
-        self.progress_reset()  
+        self.progress_reset()
 
     def event_tree_click(self, event):
         x, y, widget = event.x, event.y, event.widget
@@ -430,7 +441,6 @@ class App:
             if self.tree_media.identify_column(x) == self.Column.FORMAT:
                 self.change_item_format(item)
                 self.change_check_audio()
-                
 
     def event_tree_doubleclick(self, event):
         x, y = event.x, event.y
@@ -443,11 +453,11 @@ class App:
                 self.change_item_title(item)
 
             if not self.tree_media.identify_column(x) == self.Column.STATUS:
-                self.tree_media.item(item, open=not self.tree_media.item(item, 'open'))
+                self.tree_media.item(
+                    item, open=not self.tree_media.item(item, 'open'))
 
             if self.tree_media.identify_column(x) == self.Column.URL:
                 self.change_item_url(item)
-
 
     def event_check_audio(self):
         for child in self.tree_media.get_children():
@@ -483,34 +493,55 @@ class App:
         self.entry_dir_default.xview_scroll(1, tk.UNITS)
 
     def change_item_destination(self, item):
-        dest = self.tree_media.set(item, self.Column.DESTINATION).replace('~', self.var_dir_default.get())
+        status = self.tree_media.set(item, self.Column.STATUS)
+        if status in [dl.Status.DONE, dl.Status.ERROR_URL, dl.Status.DOWNLOAD]:
+            return
+        dest = self.tree_media.set(item, self.Column.DESTINATION).replace(
+            '~', self.var_dir_default.get())
         if parent := self.tree_media.parent(item):
-            parent_dest = self.tree_media.set(parent, self.Column.DESTINATION).replace('~', self.var_dir_default.get())
+            # parent_dest = self.tree_media.set(parent, self.Column.DESTINATION).replace(
+            #    '~', self.var_dir_default.get())
             children = self.tree_media.get_children(parent)
         else:
             children = self.tree_media.get_children(item)
-            
+
         dir_new = fdiag.askdirectory(initialdir=dest, mustexist=True)
         if dir_new:
-            dest_new = dir_new.replace(self.var_dir_default.get(), '~') + os.sep
-            self.tree_media.set(item, self.Column.DESTINATION, dest_new)
+            dest_new = dir_new.replace(
+                self.var_dir_default.get(), '~') + os.sep
             if not parent and children:
-                    for child in children:
-                        self.tree_media.set(child, self.Column.DESTINATION, dest_new)
+                self.tree_media.set(
+                    item,
+                    self.Column.DESTINATION,
+                    dest_new + self.tree_media.set(item, self.Column.TITLE) + os.sep)
+                for child in children:
+                    self.tree_media.set(
+                        child,
+                        self.Column.DESTINATION,
+                        dest_new + self.tree_media.set(item, self.Column.TITLE) + os.sep)
+            else:
+                self.tree_media.set(
+                    item,
+                    self.Column.DESTINATION,
+                    dest_new)
             if parent:
                 self.tree_media.set(parent, self.Column.DESTINATION, "")
                 self.var_check_subdir.set(False)
-    
+
     def change_item_title(self, item):
+        status = self.tree_media.set(item, self.Column.STATUS)
+        if status in [dl.Status.DONE, dl.Status.ERROR_URL, dl.Status.DOWNLOAD]:
+            return
         title_old = self.tree_media.set(item, self.Column.TITLE)
-        title_new = askstring('Edit title', 'Enter new title:', initialvalue=title_old)
+        title_new = askstring(
+            'Edit title', 'Enter new title:', initialvalue=title_old)
         if title_new:
             self.tree_media.set(item, self.Column.TITLE, title_new)
-            
-            if not (parent := self.tree_media.parent(item)):
+
+            if not self.tree_media.parent(item):
                 if children := self.tree_media.get_children(item):
                     self.tree_media.set(item, self.Column.DESTINATION,
-                                self.tree_media.set(item, self.Column.DESTINATION).replace(title_old, title_new))
+                                        self.tree_media.set(item, self.Column.DESTINATION).replace(title_old, title_new))
                     for child in children:
                         self.tree_media.set(child, self.Column.DESTINATION,
                                             self.tree_media.set(child, self.Column.DESTINATION).replace(title_old, title_new))
@@ -528,7 +559,8 @@ class App:
                 else:
                     self.tree_media.change_state(item, "checked")
                 children = self.tree_media.get_children(parent)
-                states = ["checked" in self.tree_media.item(c, "tags") for c in children]
+                states = ["checked" in self.tree_media.item(
+                    c, "tags") for c in children]
                 if all(states):
                     self.tree_media.change_state(parent, "checked")
                 else:
@@ -542,31 +574,36 @@ class App:
                     state = "unchecked"
                 else:
                     self.tree_media.change_state(item, "checked")
-                    state="checked"
+                    state = "checked"
                 children = self.tree_media.get_children(item)
                 for c in children:
                     if self.map_media[c].status != dl.Status.DONE:
                         self.tree_media.change_state(c, state)
 
-
     def change_item_format(self, item):
+        status = self.tree_media.set(item, self.Column.STATUS)
+        if status in [dl.Status.DONE, dl.Status.ERROR_URL, dl.Status.DOWNLOAD]:
+            return
         if parent := self.tree_media.parent(item):
             children = None
         else:
             children = self.tree_media.get_children(item)
-            
+
         if self.tree_media.set(item, self.Column.FORMAT) == dl.Format.AUDIO:
             self.tree_media.set(item, self.Column.FORMAT, dl.Format.VIDEO)
             if parent:
                 self.map_media[item].format = dl.Format.VIDEO
                 if all([self.tree_media.set(v, self.Column.FORMAT) == dl.Format.VIDEO for v in self.tree_media.get_children(parent)]):
-                    self.tree_media.set(parent, self.Column.FORMAT, dl.Format.VIDEO)
+                    self.tree_media.set(
+                        parent, self.Column.FORMAT, dl.Format.VIDEO)
                 else:
-                    self.tree_media.set(parent, self.Column.FORMAT, dl.Format.BOTH)
+                    self.tree_media.set(
+                        parent, self.Column.FORMAT, dl.Format.BOTH)
             else:
                 if children:
                     for child in children:
-                        self.tree_media.set(child, self.Column.FORMAT, dl.Format.VIDEO)
+                        self.tree_media.set(
+                            child, self.Column.FORMAT, dl.Format.VIDEO)
                         self.map_media[child].format = dl.Format.VIDEO
                 else:
                     self.map_media[item].format = dl.Format.VIDEO
@@ -600,13 +637,16 @@ class App:
 
     def change_item_url(self, item):
         if self.tree_media.set(item, self.Column.STATUS) == dl.Status.ERROR_URL:
-            url_new = askstring('Edit URL', 'Enter new URL:', initialvalue=self.tree_media.item(item, option='text'))
+            url_new = askstring('Edit URL', 'Enter new URL:',
+                                initialvalue=self.tree_media.item(item, option='text'))
             if url_new:
                 self.event_add(url_new)
                 self.tree_media.delete(self.tree_media.focus())
-            
+
 
 if __name__ == '__main__':
+    if not os.path.exists(os.path.sep.join([os.path.expanduser('~'), "YouTube"])):
+        os.makedirs(os.path.sep.join([os.path.expanduser('~'), "YouTube"]))
     root = tk.Tk()
     app = App(root)
     root.mainloop()

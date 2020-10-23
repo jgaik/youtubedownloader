@@ -1,8 +1,8 @@
-import youtube_dl as yt
+# pylint: disable=attribute-defined-outside-init, C0114, C0115, C0116, invalid-name, unused-argument
 from threading import Event
 import os
-from collections.abc import Sequence
 import json
+import youtube_dl as yt
 
 
 def extractMedia(url):
@@ -97,5 +97,9 @@ class Media:
 
     def __repr__(self):
         dic = self.__dict__
-        keys = [k for k in dic.keys() if k[0] != "_"]
-        return json.dumps({'class': self.__class__.__name__, 'fields': dict([(k, dic[k]) for k in keys])}, indent=4)
+        keys = [k for k in dic if k[0] != "_"]
+        return json.dumps(
+            {
+                'class': self.__class__.__name__,
+                'fields': dict([(k, dic[k]) for k in keys])
+            }, indent=4)
