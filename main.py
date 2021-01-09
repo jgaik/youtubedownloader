@@ -1,4 +1,6 @@
 # pylint: disable=attribute-defined-outside-init, C0114, C0115, C0116, invalid-name, unused-argument, redefined-builtin, line-too-long, superfluous-parens, protected-access
+import platform
+import subprocess
 import re
 import os
 import threading as th
@@ -9,6 +11,7 @@ import tkinter.simpledialog as sdiag
 import tkinter.filedialog as fdiag
 import tkinter as tk
 from tkinter import ttk
+from PIL import ImageTk, Image
 import ttkwidgets
 import pyperclip
 import downloader as dl
@@ -167,7 +170,7 @@ class App:
             [os.path.expanduser('~'), "YouTube"]))
         self.entry_dir_default = ttk.Entry(
             self.frame_dir, textvariable=self.var_dir_default, state=tk.DISABLED)
-        self.entry_dir_default.bind("<Double-1>", self.event_dir_default)
+        self.entry_dir_default.bind("<Double-1>", self.event_open_dir)
         self.entry_dir_default.bind("<Button-4>", self.event_dir_scroll_up)
         self.entry_dir_default.bind("<Button-5>", self.event_dir_scroll_down)
 
@@ -249,6 +252,10 @@ class App:
         self.check_audio.pack(fill='x', pady=5)
 
         # window
+        self.image_icon = Image.open('assets' + os.sep + '/Youtube-icon.ico')
+        self.imagetk_icon = ImageTk.PhotoImage(
+            self.image_icon.resize((100, 100)))
+        self.master.iconphoto(False, self.imagetk_icon)
         self.master.title("YouTube downloader")
         self.master.update()
         w_max = self.master.winfo_screenwidth()
@@ -264,6 +271,15 @@ class App:
         pos_y = int((h_max - h_out)/5)
         self.master.geometry(f"{w_out}x{h_out}+{pos_x}+{pos_y}")
         self.master.minsize(w_min, h_min)
+
+    def event_open_dir(self, event):
+        path = self.entry_dir_default.get()
+        if platform.system() == "Windows":
+            subprocess.Popen(["explorer", path])
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
 
     def progress_prepare(self, max=0, text=None):
         self.progress_info['maximum'] += max
