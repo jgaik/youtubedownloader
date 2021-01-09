@@ -386,7 +386,7 @@ class App:
 
     def event_download(self):
         if self._tcounter_update.finished() and not self._tcounter_download.started():
-            items = [item for item in self.tree_media.get_checked()]
+            items = self.tree_media.get_checked()
             if len(items) > 0:
                 self.progress_prepare(
                     text="Downloading media..", max=len(items))
@@ -405,6 +405,7 @@ class App:
             "~", self.var_dir_default.get())
         media.start_download(dest)
         media.wait_download()
+        # media.rename()
         self._queue_media.put((item, media.status))
         self._tcounter_download.decrement()
 
@@ -550,7 +551,7 @@ class App:
             return
         title_old = self.tree_media.set(item, self.Column.TITLE)
         title_new = askstring(
-            'Edit title', 'Enter new title:', initialvalue=title_old)
+            'Edit title', 'Enter new title:', initialvalue=title_old).replace(os.sep, "")
         if title_new:
             self.tree_media.set(item, self.Column.TITLE, title_new)
 

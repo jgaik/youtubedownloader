@@ -61,26 +61,25 @@ class Media:
         if downloader:
             self._flag_download = Event()
             self._downloadable = True
-            opts = {
-                'format': 'bestaudio/best',
-                'quiet': True,
-                'ignoreerrors': True,
-                'progress_hooks': [self.hook]
-            }
-            self._ydl = yt.YoutubeDL(opts)
 
     def start_download(self, dest):
         if self._downloadable:
-            self._ydl.params['outtmpl'] = dest + "%(id)s"
+            opts = {
+                'quiet': True,
+                'ignoreerrors': True,
+                'progress_hooks': [self.hook],
+                'outtmpl': dest + self.title.replace(os.sep, "") + ".%(ext)s"
+            }
             if self.format == Format.AUDIO:
-                self._ydl.params['postprocessors'] = [{
+                opts['format'] = 'bestaudio/best'
+                opts['postprocessors'] = [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3'
                 }]
-                self._ydl.params['outtmpl'] += ".mp3"
             if self.format == Format.VIDEO:
-                self._ydl.params['outtmpl'] += ".mp4"
-            self._ydl.download([self.url])
+                opts['format'] = 'bestvideo+bestaudio/best'
+            with yt.YoutubeDL(opts) as _ydl:
+                _ydl.download([self.url])
 
     def wait_download(self):
         self._flag_download.wait()
@@ -88,8 +87,6 @@ class Media:
     def hook(self, dl_data):
         if dl_data['status'] == 'finished':
             self.status = Status.DONE
-            os.rename(dl_data['filename'], dl_data['filename'].replace(
-                self.url, self.title))
             self._flag_download.set()
         if dl_data['status'] == 'error':
             self.status = Status.ERROR_DOWNLOAD
