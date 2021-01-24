@@ -98,5 +98,5 @@ class Media:
         return json.dumps(
             {
                 'class': self.__class__.__name__,
-                'fields': dict([(k, dic[k]) for k in keys])
+                'fields': {(k, dic[k]) for k in keys}
             }, indent=4)
